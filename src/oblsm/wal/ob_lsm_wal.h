@@ -21,101 +21,83 @@ namespace oceanbase {
 
 /**
  * @struct WalRecord
- * @brief A structure representing a record in the Write-Ahead Log (WAL).
- * Each record contains a sequence number, a key, and a value.
+ * @brief 预写日志（WAL）中的一条记录，包含序列号、键和值。
  */
 struct WalRecord
 {
-  /** Sequence number of the record, used to identify the order of records. */
+  /** 记录的序列号，用于标识日志的写入顺序。 */
   uint64_t seq;
-  /** The key associated with the record. */
+  /** 记录对应的键。 */
   std::string key;
-  /** The value associated with the record. */
+  /** 记录对应的值。 */
   std::string val;
 
   /**
-   * @brief Parameterized constructor to create a new WalRecord object.
+   * @brief 构造一条 WAL 记录。
    *
-   * @param s The sequence number.
-   * @param k The key.
-   * @param v The value.
+   * @param s 序列号
+   * @param k 键
+   * @param v 值
    */
   WalRecord(uint64_t s, std::string k, std::string v) : seq(s), key(std::move(k)), val(std::move(v)) {}
 };
 
 /**
- * @class Wal
- * @brief A class responsible for memtable recovery and Write-Ahead Log (WAL) operations.
- * This class enables writing data to a file using the WAL mechanism and recovering data from a previously written WAL
- * file. The WAL format ensures that data modifications are logged before being applied to the main data store,
- * providing durability in case of system failures.
+ * @class WAL
+ * @brief 负责预写日志（WAL）的写入与 memtable 恢复。
  *
- * ### Data Serialization Format:
- * The data is serialized as follows:
- * - Each entry in the WAL consists of a key-value pair.
- * - The data format is:
- *   - **Sequence Number (uint64_t)**: A 8-byte value representing the sequence of logs.
- *   - **Key Length (size_t)**: A value representing the length of the key.
- *   - **Key (string)**: The actual key, as a string.
- *   - **Value Length (size_t)**: A value representing the length of the value.
- *   - **Value (string)**: The actual value, as a string.
+ * WAL 保证数据写入主存储前先持久化到日志文件，系统崩溃后可通过重放日志恢复 memtable。
  *
- * The data is written to the file in the order: key length, key, value length, value.
- * After writing the data, the system performs a `flush()` operation to ensure the data is persisted.
+ * ### 序列化格式：
+ * 每条记录按以下顺序写入文件：
+ * - **序列号（uint64_t）**：8 字节，标识日志顺序。
+ * - **Key 长度（size_t）**：键的字节长度。
+ * - **Key（string）**：键的内容。
+ * - **Value 长度（size_t）**：值的字节长度。
+ * - **Value（string）**：值的内容。
+ *
+ * 每次写入后调用 `flush()` 确保数据落盘。
  */
 class WAL
 {
 public:
-  /**
-   * @brief Default constructor for the Wal class.
-   */
   WAL() {}
 
-  /**
-   * @brief Destructor for the Wal class.
-   * Ensures that the file writer is closed when the Wal object is destroyed.
-   */
   ~WAL() = default;
 
   /**
-   * @brief Opens the WAL file for writing.
-   * This function initializes the file writer and prepares the WAL file for appending data.
-   * If the file cannot be opened, an error code is returned.
+   * @brief 打开 WAL 文件，准备追加写入。
    *
-   * @param filename The name of the WAL file to write logs.
-   * @return `RC::SUCCESS` if the file was successfully opened, or an error code if it failed.
+   * @param filename WAL 文件路径
+   * @return 成功返回 `RC::SUCCESS`，否则返回错误码。
    */
   RC open(const std::string &filename) { return RC::UNIMPLEMENTED; }
 
   /**
-   * @brief Recovers data from a specified WAL file.
+   * @brief 从指定 WAL 文件中恢复记录。
    *
-   * This function reads the given WAL file, extracts key-value pairs, and stores them in the provided vector.
-   * It also returns the total number of records read from the WAL.
+   * 读取文件中的所有键值对，追加到 `wal_records` 中。
    *
-   * @param wal_file The name of the WAL file to recover from.
-   * @param wal_records A reference to a vector where the WalRecord objects will be stored.
-   * @return `RC::SUCCESS` if recovery is successful, or an error code if it fails.
+   * @param wal_file WAL 文件路径
+   * @param wal_records 用于存放恢复出的记录
+   * @return 成功返回 `RC::SUCCESS`，否则返回错误码。
    */
   RC recover(const std::string &wal_file, std::vector<WalRecord> &wal_records);
 
   /**
-   * @brief Writes a key-value pair to the WAL.
+   * @brief 向 WAL 写入一条键值记录。
    *
-   * This function serializes the key-value pair and appends it to the WAL file.
-   *
-   * @param seq The sequence number of the record.
-   * @param key The key to write.
-   * @param val The value associated with the key.
-   * @return `RC::SUCCESS` if the write operation is successful, or an error code if it fails.
+   * @param seq 序列号
+   * @param key 键
+   * @param val 值
+   * @return 成功返回 `RC::SUCCESS`，否则返回错误码。
    */
   RC put(uint64_t seq, std::string_view key, std::string_view val);
 
   /**
-   * @brief Synchronizes the WAL to disk.
-   * Forces any buffered data in the WAL to be written to the underlying storage.
+   * @brief 将 WAL 缓冲区强制刷盘。
    *
-   * @return `RC::SUCCESS` if the sync operation is successful, or an error code if it fails.
+   * @return 成功返回 `RC::SUCCESS`，否则返回错误码。
    */
   RC sync() { return RC::UNIMPLEMENTED; }
 

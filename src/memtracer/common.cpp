@@ -13,6 +13,10 @@ See the Mulan PSL v2 for more details. */
 #include "memtracer/common.h"
 
 namespace memtracer {
+
+// 将格式化日志输出到 stderr。
+// 不使用 printf 是因为 stdout 有缓冲，进程异常退出时可能丢失日志；
+// stderr 默认无缓冲，崩溃时日志仍能完整输出。
 void log_stderr(const char *format, ...)
 {
   va_list vl;
