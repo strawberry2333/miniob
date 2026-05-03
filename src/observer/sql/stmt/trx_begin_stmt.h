@@ -20,7 +20,12 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/stmt.h"
 
 /**
- * @brief 事务的Begin 语句，现在什么成员都没有
+ * @file trx_begin_stmt.h
+ * @brief 定义 `BEGIN` 的语义对象。
+ */
+
+/**
+ * @brief 表示显式事务开始语句。
  * @ingroup Statement
  */
 class TrxBeginStmt : public Stmt
@@ -31,6 +36,9 @@ public:
 
   StmtType type() const override { return StmtType::BEGIN; }
 
+  /**
+   * @brief 创建无状态事务开始语句对象。
+   */
   static RC create(Stmt *&stmt)
   {
     stmt = new TrxBeginStmt();

@@ -32,6 +32,11 @@ class Deserializer;
 namespace bplus_tree {
 
 /**
+ * @file bplus_tree_log_entry.h
+ * @brief 定义 B+ 树细粒度日志条目及其序列化/回滚/重做接口。
+ */
+
+/**
  * @brief B+树日志操作类型
  * @ingroup CLog
  */

@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file insert_physical_operator.cpp
+ * @brief 插入算子的执行逻辑。
+ */
+
 InsertPhysicalOperator::InsertPhysicalOperator(Table *table, vector<Value> &&values)
     : table_(table), values_(std::move(values))
 {}

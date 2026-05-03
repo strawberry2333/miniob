@@ -13,6 +13,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/tasks/o_expr_task.h"
 #include "sql/optimizer/cascade/optimizer_context.h"
 
+/**
+ * @file o_group_task.cpp
+ * @brief group 级优化任务实现。
+ */
+
 void OptimizeGroup::perform()
 {
   LOG_TRACE("OptimizeGroup::perform() group %d", group_->get_id());
@@ -26,11 +31,13 @@ void OptimizeGroup::perform()
 
   if (!group_->has_explored()) {
     for (auto &logical_expr : group_->get_logical_expressions()) {
+      // 先把逻辑表达式展开成可应用规则的表达式级任务。
       push_task(new OptimizeExpression(logical_expr, context_));
     }
   }
 
   for (auto &physical_expr : group_->get_physical_expressions()) {
+    // 已经生成的物理表达式则继续优化其输入并累计总代价。
     push_task(new OptimizeInputs(physical_expr, context_));
   }
 

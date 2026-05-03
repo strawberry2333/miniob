@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/nested_loop_join_physical_operator.h"
 
+/**
+ * @file nested_loop_join_physical_operator.cpp
+ * @brief 嵌套循环连接的执行逻辑。
+ */
+
 NestedLoopJoinPhysicalOperator::NestedLoopJoinPhysicalOperator() {}
 
 RC NestedLoopJoinPhysicalOperator::open(Trx *trx)
@@ -53,6 +58,7 @@ RC NestedLoopJoinPhysicalOperator::next()
     rc = right_next();
     if (rc != RC::SUCCESS) {
       if (rc == RC::RECORD_EOF) {
+        // 右表一轮扫描结束后，回到循环顶部拉取新的左表行并重新打开右表。
         rc = RC::SUCCESS;
         round_done_ = true;
         continue;
@@ -116,6 +122,7 @@ RC NestedLoopJoinPhysicalOperator::right_next()
     }
     right_closed_ = false;
 
+    // 新的左表行对应新的一轮右表全扫描。
     round_done_ = false;
   }
 

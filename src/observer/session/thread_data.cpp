@@ -15,6 +15,16 @@ See the Mulan PSL v2 for more details. */
 #include "session/thread_data.h"
 #include "session/session.h"
 
+/**
+ * @brief ThreadData 的实现文件。
+ * @details 这里的逻辑刻意保持极简，只提供 thread_local 指针存取和事务透传。
+ */
+
+/// @brief 每个工作线程各自维护一份 ThreadData 指针。
 thread_local ThreadData *ThreadData::thread_data_;
 
+/**
+ * @brief 返回当前线程关联会话上的事务对象。
+ * @return 若 session_ 非空则返回 session_->current_trx()，否则返回空。
+ */
 Trx *ThreadData::trx() const { return (session_ == nullptr) ? nullptr : session_->current_trx(); }

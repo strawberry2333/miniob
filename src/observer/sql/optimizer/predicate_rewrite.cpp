@@ -15,6 +15,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/predicate_rewrite.h"
 #include "sql/operator/logical_operator.h"
 
+/**
+ * @file predicate_rewrite.cpp
+ * @brief 基于布尔常量结果的谓词裁剪实现。
+ */
+
 RC PredicateRewriteRule::rewrite(unique_ptr<LogicalOperator> &oper, bool &change_made)
 {
   vector<unique_ptr<LogicalOperator>> &child_opers = oper->children();
@@ -46,10 +51,12 @@ RC PredicateRewriteRule::rewrite(unique_ptr<LogicalOperator> &oper, bool &change
     vector<unique_ptr<LogicalOperator>> grand_child_opers;
     grand_child_opers.swap(child_oper->children());
     child_opers.clear();
+    // 恒真谓词节点可被移除，直接把孙子节点提升为当前节点的孩子。
     for (auto &grand_child_oper : grand_child_opers) {
       oper->add_child(std::move(grand_child_oper));
     }
   } else {
+    // 恒假谓词意味着当前子树不可能产出数据，清空孩子即可。
     child_opers.clear();
   }
 

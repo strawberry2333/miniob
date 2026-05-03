@@ -9,3 +9,8 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/hash_join_physical_operator.h"
+
+/**
+ * @file hash_join_physical_operator.cpp
+ * @brief Hash Join 占位实现文件。
+ */

@@ -14,6 +14,13 @@ See the Mulan PSL v2 for more details. */
 #include "sql/parser/parse.h"
 
 /**
+ * @file hash_join_physical_operator.h
+ * @brief Hash Join 占位类型。
+ * @details 计划生成器已经预留了 hash join 开关，但当前实现仍未落地，
+ * 因此这里只保留一个最小占位声明，供后续扩展。
+ */
+
+/**
  * @brief Hash Join 算子
  * @ingroup PhysicalOperator
  */

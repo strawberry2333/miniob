@@ -18,15 +18,22 @@ See the Mulan PSL v2 for more details. */
 
 class SQLStageEvent;
 
+/**
+ * @brief storage stage 使用的事件包装器。
+ * @details 某些 SEDA stage 只接受 StageEvent 接口，因此这里用一个轻量外壳把 SQLStageEvent 包起来。
+ */
 class StorageEvent : public common::StageEvent
 {
 public:
+  /// @brief 使用现有 SQLStageEvent 构造一个 storage 事件，不转移所有权。
   StorageEvent(SQLStageEvent *sql_event) : sql_event_(sql_event) {}
 
+  /// @brief 默认析构，具体释放策略由实现方决定。
   virtual ~StorageEvent();
 
+  /// @brief 返回被包装的 SQLStageEvent，供 storage stage 继续处理。
   SQLStageEvent *sql_event() const { return sql_event_; }
 
 private:
-  SQLStageEvent *sql_event_;
+  SQLStageEvent *sql_event_;  ///< 指向上层 SQL 处理事件；StorageEvent 本身不拥有它。
 };

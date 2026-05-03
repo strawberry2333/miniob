@@ -16,11 +16,18 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/mutex.h"
 #include "common/lang/unordered_map.h"
 
+/**
+ * @file one_thread_per_connection_thread_handler.h
+ * @brief 每个连接绑定一个独立工作线程的线程模型。
+ */
+
 class Worker;
 
 /**
- * @brief 一个连接一个线程的线程模型
+ * @brief 一个连接一个线程的线程模型。
  * @ingroup ThreadHandler
+ * @details 每个连接建立后立即创建一个 Worker 线程，线程内部轮询该连接上的输入并同步执行 SQL。
+ * 模型简单直观，但连接数与线程数线性相关，更适合教学或低并发场景。
  */
 class OneThreadPerConnectionThreadHandler : public ThreadHandler
 {
@@ -42,8 +49,6 @@ public:
   virtual RC close_connection(Communicator *communicator) override;
 
 private:
-  /// 记录一个连接Communicator关联的线程数据
-  unordered_map<Communicator *, Worker *> thread_map_;  // 当前编译器没有支持jthread
-  /// 保护线程安全的锁
-  mutex lock_;
+  unordered_map<Communicator *, Worker *> thread_map_;  ///< 连接到工作线程的映射关系。
+  mutex                                   lock_;        ///< 保护 thread_map_ 的并发访问。
 };

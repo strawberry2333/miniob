@@ -25,6 +25,11 @@ class Value;
 }  // namespace Json
 
 /**
+ * @file index_meta.h
+ * @brief 定义索引元数据及 JSON 持久化接口。
+ */
+
+/**
  * @brief 描述一个索引
  * @ingroup Index
  * @details 一个索引包含了表的哪些字段，索引的名称等。
@@ -35,6 +40,7 @@ class IndexMeta
 public:
   IndexMeta() = default;
 
+  /// @brief 初始化索引定义并绑定目标字段。
   RC init(const char *name, const FieldMeta &field);
 
 public:
@@ -44,7 +50,9 @@ public:
   void desc(ostream &os) const;
 
 public:
+  /// @brief 序列化索引元数据到 JSON。
   void      to_json(Json::Value &json_value) const;
+  /// @brief 从 JSON 恢复索引元数据，并校验字段是否存在于目标表。
   static RC from_json(const TableMeta &table, const Json::Value &json_value, IndexMeta &index);
 
 protected:

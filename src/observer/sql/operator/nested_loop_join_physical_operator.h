@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/parser/parse.h"
 
 /**
+ * @file nested_loop_join_physical_operator.h
+ * @brief 当前使用的嵌套循环连接算子声明。
+ */
+
+/**
  * @brief 最简单的两表（称为左表、右表）join算子
  * @details 依次遍历左表的每一行，然后关联右表的每一行
  * @ingroup PhysicalOperator
@@ -39,6 +44,7 @@ public:
   }
 
   RC     open(Trx *trx) override;
+  /// @brief 以“驱动左表、反复重扫右表”的方式枚举所有连接结果。
   RC     next() override;
   RC     close() override;
   Tuple *current_tuple() override;

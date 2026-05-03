@@ -15,6 +15,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/rules.h"
 #include "common/log/log.h"
 
+/**
+ * @file apply_rule_task.cpp
+ * @brief 规则应用任务实现。
+ */
+
 void ApplyRule::perform()
 {
   LOG_TRACE("ApplyRule::perform() for rule: {%d}", rule_->get_rule_idx());
@@ -47,6 +52,7 @@ void ApplyRule::perform()
   
   // TODO: FIXME, better way for record memory allocation
   for (size_t i = 0; i < after.size(); i++) {
+    // 新生成节点的所有权统一挂到 memo 上，直到 winner 回溯阶段真正被释放出去。
     context_->record_operator_node_in_memo(std::move(after[i]));
   }
 

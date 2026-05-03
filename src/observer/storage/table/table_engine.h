@@ -30,7 +30,14 @@ class Trx;
 class Db;
 
 /**
- * @brief table engine
+ * @file table_engine.h
+ * @brief 定义表引擎统一接口。
+ */
+
+/**
+ * @brief 表引擎抽象基类。
+ * @details 不同存储引擎通过实现该接口接入 `Table`，从而对上层暴露一致的 CRUD、
+ * 扫描、索引管理和同步语义。
  */
 class TableEngine
 {
@@ -38,8 +45,11 @@ public:
   TableEngine(TableMeta *table_meta) : table_meta_(table_meta) {}
   virtual ~TableEngine() = default;
 
+  /// @brief 插入一条记录。
   virtual RC insert_record(Record &record)                                                        = 0;
+  /// @brief 批量插入一批列式数据。
   virtual RC insert_chunk(const Chunk &chunk)                                                     = 0;
+  /// @brief 删除一条记录。
   virtual RC delete_record(const Record &record)                                                  = 0;
   virtual RC insert_record_with_trx(Record &record, Trx *trx)                                     = 0;
   virtual RC delete_record_with_trx(const Record &record, Trx *trx)                               = 0;
@@ -54,7 +64,7 @@ public:
   virtual Index *find_index(const char *index_name) const                                    = 0;
   virtual Index *find_index_by_field(const char *field_name) const                           = 0;
   virtual RC     open()                                                                      = 0;
-  // TODO: remove this function
+  /// @brief 旧初始化入口，仍被现有表创建流程依赖。
   virtual RC init() = 0;
 
 protected:

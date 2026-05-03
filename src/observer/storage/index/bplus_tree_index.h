@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/index/index.h"
 
 /**
+ * @file bplus_tree_index.h
+ * @brief 定义面向表记录的 B+ 树索引适配层。
+ */
+
+/**
  * @brief B+树索引
  * @ingroup Index
  */

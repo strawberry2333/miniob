@@ -20,6 +20,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/parser/parse_defs.h"
 #include "storage/buffer/disk_buffer_pool.h"
 
+/**
+ * @file bplus_tree.cpp
+ * @brief B+ 树节点操作、页分裂合并与范围扫描实现。
+ */
+
 using namespace common;
 
 /**

@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "json/json.h"
 
+/**
+ * @file field_meta.cpp
+ * @brief 字段元数据的校验、描述与 JSON 持久化实现。
+ */
+
 const static Json::StaticString FIELD_NAME("name");
 const static Json::StaticString FIELD_TYPE("type");
 const static Json::StaticString FIELD_OFFSET("offset");
@@ -78,6 +83,7 @@ void FieldMeta::desc(ostream &os) const
 
 void FieldMeta::to_json(Json::Value &json_value) const
 {
+  // 表元数据持久化时直接输出物理布局，恢复阶段不会再重新推导 offset/len。
   json_value[FIELD_NAME]    = name_;
   json_value[FIELD_TYPE]    = attr_type_to_string(attr_type_);
   json_value[FIELD_OFFSET]  = attr_offset_;
@@ -126,6 +132,7 @@ RC FieldMeta::from_json(const Json::Value &json_value, FieldMeta &field)
     return RC::INTERNAL;
   }
 
+  // 先完成 JSON 结构校验，再把字符串类型名映射回内部枚举，避免半解析状态。
   AttrType type = attr_type_from_string(type_value.asCString());
   if (AttrType::UNDEFINED == type) {
     LOG_ERROR("Got invalid field type. type=%d", type);

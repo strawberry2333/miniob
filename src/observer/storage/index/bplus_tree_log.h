@@ -44,6 +44,11 @@ class Deserializer;
 }
 
 /**
+ * @file bplus_tree_log.h
+ * @brief 定义 B+ 树 mini-transaction 日志聚合与重放接口。
+ */
+
+/**
  * @brief B+树日志记录辅助类，同时可以利用此类做回滚操作
  * @ingroup CLog
  * @details 封装B+树持久化需要的各种日志，并负责落地。

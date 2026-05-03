@@ -30,6 +30,11 @@ class CalcLogicalOperator;
 class GroupByLogicalOperator;
 
 /**
+ * @file physical_plan_generator.h
+ * @brief 从逻辑计划构造物理计划。
+ */
+
+/**
  * @brief 物理计划生成器
  * @ingroup PhysicalOperator
  * @details 根据逻辑计划生成物理计划。
@@ -41,7 +46,9 @@ public:
   PhysicalPlanGenerator()          = default;
   virtual ~PhysicalPlanGenerator() = default;
 
+  /// @brief 生成 tuple-iterator 模式的物理计划。
   RC create(LogicalOperator &logical_operator, unique_ptr<PhysicalOperator> &oper, Session *session);
+  /// @brief 生成 chunk-iterator 模式的物理计划。
   RC create_vec(LogicalOperator &logical_operator, unique_ptr<PhysicalOperator> &oper, Session *session);
 
 private:
@@ -60,5 +67,6 @@ private:
   RC create_vec_plan(ExplainLogicalOperator &logical_oper, unique_ptr<PhysicalOperator> &oper, Session *session);
 
   // TODO: remove this and add CBO rules
+  /// @brief 根据 join 谓词粗略判断当前 join 是否适合 hash join。
   bool can_use_hash_join(JoinLogicalOperator &logical_oper);
 };

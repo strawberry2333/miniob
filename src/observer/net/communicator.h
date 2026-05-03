@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "common/lang/memory.h"
 
+/**
+ * @file communicator.h
+ * @brief 定义 Observer 网络层的连接抽象与协议工厂。
+ */
+
 struct ConnectionContext;
 class SessionEvent;
 class Session;
@@ -30,13 +35,15 @@ class BufferedWriter;
  */
 
 /**
- * @brief 负责与客户端通讯
+ * @brief 负责与单个客户端连接通讯。
  * @ingroup Communicator
  *
  * @details 在listener接收到一个新的连接(参考 server.cpp::accept), 就创建一个Communicator对象。
- * 并调用init进行初始化。
- * 在server中监听到某个连接有新的消息，就通过Communicator::read_event接收消息。
- * TODO 这里的communicator把协议和通讯方式，放在了一起。plain和mysql都是一种协议，他们的通讯手段都是一样的
+ * 并调用 init 进行初始化。线程模型只感知这个抽象，不直接接触协议细节：
+ * read_event 负责从连接读取一条完整请求并在需要时构造 SessionEvent，
+ * write_result 负责把 SQL 处理结果编码回协议响应。
+ * TODO 这里的 communicator 把协议和通讯方式放在了一起。plain 和 mysql 都是一种协议，
+ * 他们的通讯手段都是一样的。
  */
 class Communicator
 {
@@ -44,22 +51,27 @@ public:
   virtual ~Communicator();
 
   /**
-   * @brief 接收到一个新的连接时，进行初始化
+   * @brief 接收到一个新连接后初始化通讯上下文。
+   * @param fd 连接对应的文件描述符。
+   * @param session 与连接绑定的 Session，对象所有权转移给 communicator。
+   * @param addr 对端地址字符串，仅用于日志和诊断。
    */
   virtual RC init(int fd, unique_ptr<Session> session, const string &addr);
 
   /**
-   * @brief 监听到有新的数据到达，调用此函数进行接收消息
-   * 如果需要创建新的任务来处理，那么就创建一个SessionEvent 对象并通过event参数返回。
+   * @brief 读取并解析一条客户端请求。
+   * @details 如果当前读到的数据只完成了握手、心跳或其他无需进入 SQL 执行链路的协议交互，
+   * 可以返回 RC::SUCCESS 且让 event 保持为空；只有真正需要执行业务时才创建 SessionEvent。
+   * @param[out] event 解析得到的请求事件；由调用方负责释放。
    */
   virtual RC read_event(SessionEvent *&event) = 0;
 
   /**
-   * @brief 在任务处理完成后，通过此接口将结果返回给客户端
-   * @param event 任务数据，包括处理的结果
-   * @param need_disconnect 是否需要断开连接
-   * @return 处理结果。即使返回不是SUCCESS，也不能直接断开连接，需要通过need_disconnect来判断
-   *         是否需要断开连接
+   * @brief 在任务处理完成后，通过此接口将结果返回给客户端。
+   * @param event 任务数据，包括原始请求和执行结果。
+   * @param[out] need_disconnect 是否需要断开连接；只有该值为 true 时，上层才会销毁连接。
+   * @return 协议编码/发送结果。即使返回值不是 SUCCESS，也不能直接断开连接，仍需以
+   * need_disconnect 为准判断连接是否还能继续复用。
    */
   virtual RC write_result(SessionEvent *event, bool &need_disconnect) = 0;
 
@@ -80,10 +92,10 @@ public:
   int fd() const { return fd_; }
 
 protected:
-  unique_ptr<Session> session_;
-  string              addr_;
-  BufferedWriter     *writer_ = nullptr;
-  int                 fd_     = -1;
+  unique_ptr<Session> session_;        ///< 与连接绑定的会话，保存执行模式、调试开关等上下文。
+  string              addr_;           ///< 对端地址，仅用于日志和诊断信息输出。
+  BufferedWriter     *writer_ = nullptr;  ///< 响应缓冲写入器，统一管理 socket 写路径。
+  int                 fd_     = -1;      ///< 连接 fd；派生类可将其置为 -1 以绕过默认关闭行为。
 };
 
 /**
@@ -98,11 +110,16 @@ enum class CommunicateProtocol
 };
 
 /**
- * @brief 通讯协议工厂
+ * @brief 通讯协议工厂。
  * @ingroup Communicator
  */
 class CommunicatorFactory
 {
 public:
+  /**
+   * @brief 根据配置创建对应协议的 communicator。
+   * @param protocol 目标协议类型。
+   * @return 新创建的 communicator，所有权交给调用方。
+   */
   Communicator *create(CommunicateProtocol protocol);
 };

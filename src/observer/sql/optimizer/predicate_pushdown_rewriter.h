@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/rewrite_rule.h"
 
 /**
+ * @file predicate_pushdown_rewriter.h
+ * @brief 谓词下推规则。
+ */
+
+/**
  * @brief 将一些谓词表达式下推到表数据扫描中
  * @ingroup Rewriter
  * @details 这样可以提前过滤一些数据
@@ -31,6 +36,8 @@ public:
   RC rewrite(unique_ptr<LogicalOperator> &oper, bool &change_made) override;
 
 private:
+  /// @brief 从谓词树里抽取可直接下推到 `TABLE_GET` 的简单表达式。
   RC   get_exprs_can_pushdown(unique_ptr<Expression> &expr, vector<unique_ptr<Expression>> &pushdown_exprs);
+  /// @brief 判断谓词节点在子表达式被搬空后是否已经退化成空壳。
   bool is_empty_predicate(unique_ptr<Expression> &expr);
 };

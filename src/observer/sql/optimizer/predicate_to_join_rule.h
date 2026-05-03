@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/rewrite_rule.h"
 
 /**
+ * @file predicate_to_join_rule.h
+ * @brief 预留的“谓词转 join 条件”规则占位。
+ */
+
+/**
  * @brief 将一些谓词表达式下推到join中
  * @ingroup Rewriter
  */

@@ -10,5 +10,12 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+/**
+ * @file table_statistics.h
+ * @brief 表统计信息占位类型。
+ * @details 目前级联优化器主要通过 `Catalog::get_table_stats` 取行数，这里预留
+ * 更细粒度统计信息（直方图、NDV 等）的承载位置。
+ */
+
 class TableStatistics
 {};

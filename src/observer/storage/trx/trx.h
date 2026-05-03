@@ -36,6 +36,11 @@ class Trx;
 class LogReplayer;
 
 /**
+ * @file trx.h
+ * @brief 定义事务抽象接口和事务管理器工厂。
+ */
+
+/**
  * @brief 描述一个操作，比如插入、删除行等
  * @ingroup Transaction
  * @details 通常包含一个操作的类型，以及操作的对象和具体的数据
@@ -115,8 +120,10 @@ public:
   virtual ~TrxKit() = default;
 
   virtual RC                       init()             = 0;
+  /// @brief 返回所有表都必须额外挂载的事务隐藏字段定义。
   virtual const vector<FieldMeta> *trx_fields() const = 0;
 
+  /// @brief 创建一个全新的运行时事务对象。
   virtual Trx *create_trx(LogHandler &log_handler) = 0;
 
   /**
@@ -127,10 +134,11 @@ public:
 
   virtual void destroy_trx(Trx *trx) = 0;
 
+  /// @brief 创建与当前事务模型匹配的日志回放器。
   virtual LogReplayer *create_log_replayer(Db &db, LogHandler &log_handler) = 0;
 
 public:
-  static TrxKit *create(const char *name, Db *db);
+static TrxKit *create(const char *name, Db *db);
 };
 
 /**
@@ -143,15 +151,23 @@ public:
   Trx(TrxKit::Type type) : type_(type) {}
   virtual ~Trx() = default;
 
+  /// @brief 在事务上下文中插入记录。
   virtual RC insert_record(Table *table, Record &record)                         = 0;
+  /// @brief 在事务上下文中删除记录。
   virtual RC delete_record(Table *table, Record &record)                         = 0;
+  /// @brief 在事务上下文中更新记录。
   virtual RC update_record(Table *table, Record &old_record, Record &new_record) = 0;
+  /// @brief 探测一条记录对当前事务是否可见、是否允许修改。
   virtual RC visit_record(Table *table, Record &record, ReadWriteMode mode)      = 0;
 
+  /// @brief 惰性启动事务。
   virtual RC start_if_need() = 0;
+  /// @brief 提交事务。
   virtual RC commit()        = 0;
+  /// @brief 回滚事务。
   virtual RC rollback()      = 0;
 
+  /// @brief 根据持久化日志做重放。
   virtual RC redo(Db *db, const LogEntry &log_entry) = 0;
 
   virtual int32_t id() const = 0;

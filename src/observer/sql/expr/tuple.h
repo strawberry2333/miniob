@@ -24,6 +24,13 @@ See the Mulan PSL v2 for more details. */
 class Table;
 
 /**
+ * @file tuple.h
+ * @brief 行式执行引擎使用的 tuple 抽象与常见适配器。
+ * @details 该文件同时承载底层行记录、投影结果、常量列表、join 结果等多种
+ * tuple 形态，是表达式求值与算子之间传递行数据的核心接口。
+ */
+
+/**
  * @defgroup Tuple
  * @brief Tuple 元组，表示一行数据，当前返回客户端时使用
  * @details
@@ -47,6 +54,7 @@ class Table;
 class TupleSchema
 {
 public:
+  /// @brief 追加一个结果列描述。
   void append_cell(const TupleCellSpec &cell) { cells_.push_back(cell); }
   void append_cell(const char *table, const char *field) { append_cell(TupleCellSpec(table, field)); }
   void append_cell(const char *alias) { append_cell(TupleCellSpec(alias)); }
@@ -169,6 +177,11 @@ public:
 
   void set_record(Record *record) { this->record_ = record; }
 
+  /**
+   * @brief 绑定表结构信息，建立字段表达式列表。
+   * @details `TableScanPhysicalOperator::open` 和 `IndexScanPhysicalOperator::open`
+   * 会调用它。由于右表 join 场景会重复打开算子，这里需要先清理旧的字段描述。
+   */
   void set_schema(const Table *table, const vector<FieldMeta> *fields)
   {
     table_ = table;
@@ -197,6 +210,7 @@ public:
     const FieldMeta *field_meta = field_expr->field().meta();
     cell.reset();
     cell.set_type(field_meta->type());
+    // RowTuple 不拷贝数据，而是让 `Value` 直接引用当前记录上的字段内存。
     cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
     return RC::SUCCESS;
   }
@@ -213,6 +227,7 @@ public:
     const char *table_name = spec.table_name();
     const char *field_name = spec.field_name();
     if (0 != strcmp(table_name, table_->name())) {
+      // 当前 RowTuple 只代表一张表，表名不匹配时可以立刻失败。
       return RC::NOTFOUND;
     }
 
@@ -260,6 +275,7 @@ public:
   ProjectTuple()          = default;
   virtual ~ProjectTuple() = default;
 
+  /// @brief 接管投影表达式列表的所有权。
   void set_expressions(vector<unique_ptr<Expression>> &&expressions) { expressions_ = std::move(expressions); }
 
   auto get_expressions() const -> const vector<unique_ptr<Expression>> & { return expressions_; }
@@ -278,6 +294,7 @@ public:
     }
 
     Expression *expr = expressions_[index].get();
+    // 投影列的值总是现场计算，避免额外缓存与同步问题。
     return expr->get_value(*tuple_, cell);
   }
 
@@ -315,7 +332,9 @@ public:
   ValueListTuple()          = default;
   virtual ~ValueListTuple() = default;
 
+  /// @brief 设置每个值对应的逻辑列描述。
   void set_names(const vector<TupleCellSpec> &specs) { specs_ = specs; }
+  /// @brief 直接设置一整行常量值。
   void set_cells(const vector<Value> &cells) { cells_ = cells; }
 
   virtual int cell_num() const override { return static_cast<int>(cells_.size()); }
@@ -370,6 +389,7 @@ public:
         return rc;
       }
 
+      // 拷贝一份值与列说明，得到不再依赖原始 tuple 生命周期的快照。
       value_list.cells_.push_back(cell);
       value_list.specs_.push_back(spec);
     }
@@ -393,7 +413,9 @@ public:
   JoinedTuple()          = default;
   virtual ~JoinedTuple() = default;
 
+  /// @brief 绑定 join 左输入的当前 tuple。
   void set_left(Tuple *left) { left_ = left; }
+  /// @brief 绑定 join 右输入的当前 tuple。
   void set_right(Tuple *right) { right_ = right; }
 
   int cell_num() const override { return left_->cell_num() + right_->cell_num(); }
@@ -433,6 +455,7 @@ public:
       return rc;
     }
 
+    // 左侧未命中时再查右侧，符合 join 输出列的查找顺序。
     return right_->find_cell(spec, value);
   }
 

@@ -14,11 +14,18 @@ See the Mulan PSL v2 for more details. */
 #ifdef USE_SIMD
 #include "common/math/simd_util.h"
 #endif
+
+/**
+ * @file aggregate_state.cpp
+ * @brief 向量化聚合状态的更新与收尾逻辑。
+ */
+
 template <typename T>
 void SumState<T>::update(const T *values, int size)
 {
 #ifdef USE_SIMD
   if constexpr (is_same<T, float>::value) {
+    // 浮点列优先走 SIMD 路径，减少逐元素加法的循环开销。
     value += mm256_sum_ps(values, size);
   } else if constexpr (is_same<T, int>::value) {
     value += mm256_sum_epi32(values, size);
@@ -33,6 +40,7 @@ void SumState<T>::update(const T *values, int size)
 template <typename T>
 void AvgState<T>::update(const T *values, int size)
 {
+  // `AVG` 需要同时维护总和与行数，因此当前保留标量循环实现。
   for (int i = 0; i < size; ++i) {
  	  value += values[i];
   }
@@ -50,6 +58,7 @@ void* create_aggregate_state(AggregateExpr::Type aggr_type, AttrType attr_type)
   void* state_ptr = nullptr;
   if (aggr_type == AggregateExpr::Type::SUM) {
     if (attr_type == AttrType::INTS) {
+      // 使用裸内存加 placement new，避免为每一行/每一组引入额外封装开销。
       state_ptr = malloc(sizeof(SumState<int>));
       new (state_ptr) SumState<int>();
     } else if (attr_type == AttrType::FLOATS) {
@@ -111,6 +120,7 @@ template <class STATE, typename T>
 void append_to_column(void *state, Column &column)
 {
   STATE *state_ptr = reinterpret_cast<STATE *>(state);
+  // `finalize` 负责把内部状态转换成 SQL 结果类型，再追加到输出列中。
   T res = state_ptr->template finalize<T>();
   column.append_one((char *)&res);
 }
@@ -150,6 +160,7 @@ void update_aggregate_state(void *state, const Column &column)
 {
   STATE *state_ptr = reinterpret_cast<STATE *>(state);
   T *    data      = (T *)column.data();
+  // 这里假定 `column` 的物理类型已经与模板参数匹配，由调用方负责保证。
   state_ptr->update(data, column.count());
 }
 

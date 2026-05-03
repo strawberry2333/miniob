@@ -19,8 +19,14 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/predicate_pushdown_rewriter.h"
 #include "sql/optimizer/predicate_rewrite.h"
 
+/**
+ * @file rewriter.cpp
+ * @brief 逻辑计划重写器实现。
+ */
+
 Rewriter::Rewriter()
 {
+  // 先做表达式局部折叠，再做谓词结构改写与下推，保证规则之间的输入更简单。
   rewrite_rules_.emplace_back(new ExpressionRewriter);
   rewrite_rules_.emplace_back(new PredicateRewriteRule);
   rewrite_rules_.emplace_back(new PredicatePushdownRewriter);
@@ -34,6 +40,7 @@ RC Rewriter::rewrite(unique_ptr<LogicalOperator> &oper, bool &change_made)
   for (unique_ptr<RewriteRule> &rule : rewrite_rules_) {
     bool sub_change_made = false;
 
+    // 每条规则只感知当前根节点，递归遍历由 `Rewriter` 本身统一负责。
     rc = rule->rewrite(oper, sub_change_made);
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to rewrite logical operator. rc=%s", strrc(rc));

@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/clog/log_replayer.h"
 #include "common/lang/chrono.h"
 
+/**
+ * @file disk_log_handler.cpp
+ * @brief 带后台线程的磁盘日志处理器实现。
+ */
+
 using namespace common;
 
 ////////////////////////////////////////////////////////////////////////////////

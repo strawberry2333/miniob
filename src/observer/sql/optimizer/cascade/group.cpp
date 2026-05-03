@@ -12,6 +12,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/group_expr.h"
 #include "sql/optimizer/cascade/memo.h"
 
+/**
+ * @file group.cpp
+ * @brief memo 等价类的维护逻辑。
+ */
+
 Group::Group(int id, GroupExpr* expr, Memo *memo)
       : id_(id), winner_(std::make_tuple(numeric_limits<double>::max(), nullptr)), has_explored_(false)
 {
@@ -22,6 +27,7 @@ Group::Group(int id, GroupExpr* expr, Memo *memo)
 	} else {
 		for(int i=0; i<arity; i++)
 		{	
+			// 逻辑属性由当前表达式根节点结合所有孩子 group 的属性推导得出。
 			auto group = memo->get_group_by_id(expr->get_child_group_id(i));
 			input_prop.push_back(group->get_logical_prop());
 		}
@@ -49,8 +55,6 @@ void Group::add_expr(GroupExpr *expr)
 }
 
 bool Group::set_expr_cost(GroupExpr *expr, double cost) {
-  
-
   if (std::get<0>(winner_) > cost) {
     // this is lower cost
     winner_ = std::make_tuple(cost, expr);

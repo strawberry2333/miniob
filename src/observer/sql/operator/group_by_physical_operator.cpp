@@ -21,6 +21,11 @@ See the Mulan PSL v2 for more details. */
 using namespace std;
 using namespace common;
 
+/**
+ * @file group_by_physical_operator.cpp
+ * @brief 行式 group by 基类的公共聚合逻辑。
+ */
+
 GroupByPhysicalOperator::GroupByPhysicalOperator(vector<Expression *> &&expressions)
 {
   aggregate_expressions_ = std::move(expressions);
@@ -37,6 +42,7 @@ void GroupByPhysicalOperator::create_aggregator_list(AggregatorList &aggregator_
 {
   aggregator_list.clear();
   aggregator_list.reserve(aggregate_expressions_.size());
+  // 聚合器列表与输出聚合表达式一一对应，顺序必须保持稳定。
   std::ranges::for_each(aggregate_expressions_, [&aggregator_list](Expression *expr) {
     auto *aggregate_expr = static_cast<AggregateExpr *>(expr);
     aggregator_list.emplace_back(aggregate_expr->create_aggregator());
@@ -55,6 +61,7 @@ RC GroupByPhysicalOperator::aggregate(AggregatorList &aggregator_list, const Tup
   for (int i = 0; i < size; i++) {
     Aggregator *aggregator = aggregator_list[i].get();
 
+    // 子 tuple 在这里已经被包装为“仅包含聚合输入表达式”的顺序值列表。
     rc = tuple.cell_at(i, value);
     if (OB_FAIL(rc)) {
       LOG_WARN("failed to get value from expression. rc=%s", strrc(rc));
@@ -98,6 +105,7 @@ RC GroupByPhysicalOperator::evaluate(GroupValueType &group_value)
   evaluated_tuple.set_cells(values);
   evaluated_tuple.set_names(aggregator_names);
 
+  // 把聚合结果追加到缓存的原始 tuple 后面，形成最终对外暴露的输出行。
   composite_value_tuple.add_tuple(make_unique<ValueListTuple>(std::move(evaluated_tuple)));
 
   return rc;

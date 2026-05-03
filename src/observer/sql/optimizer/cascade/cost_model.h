@@ -12,6 +12,11 @@ See the Mulan PSL v2 for more details. */
 
 class Memo;
 class GroupExpr;
+
+/**
+ * @file cost_model.h
+ * @brief 级联优化器的代价模型。
+ */
 /**
  * @brief cost model in cost-based optimization(CBO)
  */
@@ -43,5 +48,6 @@ public:
   ///< i/o cost
   inline double io() { return IO; }
 
+  /// @brief 结合 memo 中的逻辑属性与子计划代价计算当前表达式代价。
   double calculate_cost(Memo *memo, GroupExpr *gexpr);
 };

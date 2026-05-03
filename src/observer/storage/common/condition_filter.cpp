@@ -20,12 +20,18 @@ See the Mulan PSL v2 for more details. */
 #include <math.h>
 #include <stddef.h>
 
+/**
+ * @file condition_filter.cpp
+ * @brief 记录级条件过滤器实现。
+ */
+
 using namespace common;
 
 ConditionFilter::~ConditionFilter() {}
 
 DefaultConditionFilter::DefaultConditionFilter()
 {
+  // 默认构造为“无绑定”的常量描述，后续必须通过 init 绑定真实字段或常量。
   left_.is_attr     = false;
   left_.attr_length = 0;
   left_.attr_offset = 0;
@@ -65,6 +71,7 @@ RC DefaultConditionFilter::init(Table &table, const ConditionSqlNode &condition)
   AttrType type_right = AttrType::UNDEFINED;
 
   if (1 == condition.left_is_attr) {
+    // 字段侧在初始化时就解析为 offset/len，运行期无需再次查 schema。
     left.is_attr                = true;
     const FieldMeta *field_left = table_meta.field(condition.left_attr.attribute_name.c_str());
     if (nullptr == field_left) {
@@ -76,6 +83,7 @@ RC DefaultConditionFilter::init(Table &table, const ConditionSqlNode &condition)
 
     type_left = field_left->type();
   } else {
+    // 常量侧直接缓存 Value，过滤时复用，避免每行重复构造。
     left.is_attr = false;
     left.value   = condition.left_value;  // 校验type 或者转换类型
     type_left    = condition.left_value.attr_type();
@@ -103,7 +111,7 @@ RC DefaultConditionFilter::init(Table &table, const ConditionSqlNode &condition)
     right.attr_offset = 0;
   }
 
-  // 校验和转换
+  // 这里在执行前就做类型兼容性检查，避免扫描期再走错误路径。
   //  if (!field_type_compare_compatible_table[type_left][type_right]) {
   //    // 不能比较的两个字段， 要把信息传给客户端
   //    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
@@ -122,7 +130,7 @@ bool DefaultConditionFilter::filter(const Record &rec) const
   Value left_value;
   Value right_value;
 
-  if (left_.is_attr) {  // value
+  if (left_.is_attr) {
     left_value.set_type(attr_type_);
     left_value.set_data(rec.data() + left_.attr_offset, left_.attr_length);
   } else {
@@ -138,6 +146,7 @@ bool DefaultConditionFilter::filter(const Record &rec) const
 
   int cmp_result = left_value.compare(right_value);
 
+  // 比较结果统一转换为 CompOp 语义；没有任何持久化副作用，可安全重复执行。
   switch (comp_op_) {
     case EQUAL_TO: return 0 == cmp_result;
     case LESS_EQUAL: return cmp_result <= 0;
@@ -156,6 +165,7 @@ bool DefaultConditionFilter::filter(const Record &rec) const
 CompositeConditionFilter::~CompositeConditionFilter()
 {
   if (memory_owner_) {
+    // 仅释放数组本身；每个子过滤器对象在构造失败路径中已由 init 手动回收。
     delete[] filters_;
     filters_ = nullptr;
   }
@@ -188,6 +198,7 @@ RC CompositeConditionFilter::init(Table &table, const ConditionSqlNode *conditio
     DefaultConditionFilter *default_condition_filter = new DefaultConditionFilter();
     rc                                               = default_condition_filter->init(table, conditions[i]);
     if (rc != RC::SUCCESS) {
+      // 任一子谓词构造失败时，必须回收此前已构造的过滤器，避免半初始化泄漏。
       delete default_condition_filter;
       for (int j = i - 1; j >= 0; j--) {
         delete condition_filters[j];

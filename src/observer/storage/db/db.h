@@ -32,6 +32,11 @@ class BufferPoolManager;
 class TrxKit;
 
 /**
+ * @file db.h
+ * @brief 定义数据库目录级对象及其存储子系统装配关系。
+ */
+
+/**
  * @brief 一个DB实例负责管理一批表
  * @details 当前DB的存储模式很简单，一个DB对应一个目录，所有的表和数据都放置在这个目录下。
  * 启动时，从指定的目录下加载所有的表和元数据。
@@ -105,17 +110,17 @@ public:
   oceanbase::ObLsm *lsm() { return lsm_; }
 
 private:
-  /// @brief 打开所有的表。在数据库初始化的时候会执行
+  /// @brief 打开目录中的所有表元数据文件并构造表对象。
   RC open_all_tables();
-  /// @brief 恢复数据。在数据库初始化的时候运行。
+  /// @brief 通过日志与 double write buffer 对数据库做启动恢复。
   RC recover();
 
-  /// @brief 初始化元数据。在数据库初始化的时候，加载元数据
+  /// @brief 初始化数据库级元数据，例如下一个表 ID 和检查点位置。
   RC init_meta();
-  /// @brief 刷新数据库的元数据到磁盘中。每次执行sync时会执行此操作
+  /// @brief 将数据库级元数据刷盘；`sync` 成功前后必须保持该文件自洽。
   RC flush_meta();
 
-  /// @brief 初始化数据库的double buffer pool
+  /// @brief 初始化 double write buffer 的内存视图和恢复状态。
   RC init_dblwr_buffer();
 
   StorageEngine get_storage_engine()

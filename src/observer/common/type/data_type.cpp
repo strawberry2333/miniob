@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/type/data_type.h"
 #include "common/type/vector_type.h"
 
+/**
+ * @brief DataType 全局类型实例表。
+ * @details 启动时静态构造出每个 AttrType 对应的处理对象，后续所有 Value 运算都通过这里分派。
+ */
+
 // Todo: 实现新数据类型
 // your code here
 

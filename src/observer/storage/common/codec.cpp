@@ -10,6 +10,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "storage/common/codec.h"
 
+/**
+ * @file codec.cpp
+ * @brief OrderedCode 静态查找表定义。
+ */
+
 const byte_t OrderedCode::term[] = {0x00, 0x01};
 const byte_t OrderedCode::lit00[] = {0x00, 0xff};
 const byte_t OrderedCode::litff[] = {0xff, 0x00};

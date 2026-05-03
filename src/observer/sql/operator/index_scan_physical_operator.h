@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/record/record_manager.h"
 
 /**
+ * @file index_scan_physical_operator.h
+ * @brief 行式索引扫描算子。
+ */
+
+/**
  * @brief 索引扫描物理算子
  * @ingroup PhysicalOperator
  */
@@ -35,6 +40,7 @@ public:
   string param() const override;
 
   RC open(Trx *trx) override;
+  /// @brief 顺序读取索引条目、回表取记录，并附加事务可见性与谓词过滤。
   RC next() override;
   RC close() override;
 

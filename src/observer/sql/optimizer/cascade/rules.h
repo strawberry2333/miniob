@@ -15,6 +15,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/pattern.h"
 
 /**
+ * @file rules.h
+ * @brief 级联优化器规则与规则集定义。
+ */
+
+/**
  * @brief: Enum defining the types of rules
  */
 enum class RuleType : uint32_t

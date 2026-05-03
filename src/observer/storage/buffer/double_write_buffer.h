@@ -24,6 +24,11 @@ class DiskBufferPool;
 struct DoubleWritePage;
 class BufferPoolManager;
 
+/**
+ * @file double_write_buffer.h
+ * @brief 定义 double write buffer 抽象和磁盘实现。
+ */
+
 class DoubleWriteBuffer
 {
 public:
@@ -50,6 +55,7 @@ struct DoubleWriteBufferHeader
   static const int32_t SIZE;
 };
 
+/// @brief double write buffer 中页的定位键。
 // TODO change to FrameId
 struct DoubleWritePageKey
 {

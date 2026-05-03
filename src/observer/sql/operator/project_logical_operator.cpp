@@ -16,6 +16,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file project_logical_operator.cpp
+ * @brief `ProjectLogicalOperator` 的构造与统计属性实现。
+ */
+
 ProjectLogicalOperator::ProjectLogicalOperator(vector<unique_ptr<Expression>> &&expressions)
 {
   expressions_ = std::move(expressions);
@@ -26,6 +31,7 @@ unique_ptr<LogicalProperty> ProjectLogicalOperator::find_log_prop(const vector<L
   int card = 0;
   for (auto log_prop : log_props) {
     if (log_prop != nullptr) {
+      // 当前实现把多个输入的基数粗略相加，仅供级联优化器占位使用。
       card += log_prop->get_card();
     } else {
       LOG_WARN("find_log_prop: log_prop is nullptr");

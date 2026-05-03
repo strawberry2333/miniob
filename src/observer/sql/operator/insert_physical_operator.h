@@ -20,12 +20,18 @@ See the Mulan PSL v2 for more details. */
 class InsertStmt;
 
 /**
+ * @file insert_physical_operator.h
+ * @brief 插入物理算子声明。
+ */
+
+/**
  * @brief 插入物理算子
  * @ingroup PhysicalOperator
  */
 class InsertPhysicalOperator : public PhysicalOperator
 {
 public:
+  /// @brief 绑定目标表和待插入的值列表。
   InsertPhysicalOperator(Table *table, vector<Value> &&values);
 
   virtual ~InsertPhysicalOperator() = default;

@@ -19,6 +19,13 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/unordered_set.h"
 
 /**
+ * @file logical_operator.h
+ * @brief 逻辑计划树的基础抽象。
+ * @details 逻辑算子只描述“要做什么”，例如扫描、过滤、投影、连接与聚合，
+ * 不关心具体执行算法。优化器会在该层做规则改写，随后再映射到物理算子。
+ */
+
+/**
  * @brief 逻辑算子
  * @defgroup LogicalOperator
  * @details 逻辑算子描述当前执行计划要做什么，比如从表中获取数据，过滤，投影，连接等等。
@@ -57,12 +64,31 @@ public:
   bool is_physical() const override { return false; }
   bool is_logical() const override { return true; }
 
+  /**
+   * @brief 追加一个逻辑子算子。
+   * @details 逻辑计划生成器和重写器都会用它拼接树结构，所有权会转移到当前节点。
+   */
   void        add_child(unique_ptr<LogicalOperator> oper);
+
+  /**
+   * @brief 追加一个挂在当前算子上的表达式。
+   * @details 不同算子对表达式的语义不同，例如投影列、谓词、分组列等。
+   */
   void        add_expressions(unique_ptr<Expression> expr);
   auto        children() -> vector<unique_ptr<LogicalOperator>>        &{ return children_; }
   auto        expressions() -> vector<unique_ptr<Expression>>        &{ return expressions_; }
+
+  /**
+   * @brief 判断该逻辑算子是否存在向量化物理实现。
+   * @details `OptimizeStage::generate_physical_plan` 会用它决定是否走 chunk 模式。
+   */
   static bool can_generate_vectorized_operator(const LogicalOperatorType &type);
   // TODO: used by cascade optimizer, tmp function, need to be remove
+
+  /**
+   * @brief 为级联优化器生成统一的子节点数组。
+   * @details `OperatorNode::general_children_` 允许逻辑/物理节点在 memo 中走同一套遍历逻辑。
+   */
   void generate_general_child();
 
 protected:

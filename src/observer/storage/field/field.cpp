@@ -17,17 +17,24 @@ See the Mulan PSL v2 for more details. */
 #include "common/value.h"
 #include "storage/record/record.h"
 
+/**
+ * @file field.cpp
+ * @brief `Field` 访问器的偏移读写实现。
+ */
+
 void Field::set_int(Record &record, int value)
 {
   ASSERT(field_->type() == AttrType::INTS, "could not set int value to a non-int field");
   ASSERT(field_->len() == sizeof(value), "invalid field len");
 
+  // Field 仅根据元数据中的物理偏移直接覆写记录内容，不额外做格式转换。
   char *field_data = record.data() + field_->offset();
   memcpy(field_data, &value, sizeof(value));
 }
 
 int Field::get_int(const Record &record)
 {
+  // 通过 Value 解码可复用类型系统对 INT 的读取语义。
   Value value(field_->type(), const_cast<char *>(record.data() + field_->offset()), field_->len());
   return value.get_int();
 }

@@ -14,4 +14,9 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/delete_logical_operator.h"
 
+/**
+ * @file delete_logical_operator.cpp
+ * @brief `DeleteLogicalOperator` 的简单构造实现。
+ */
+
 DeleteLogicalOperator::DeleteLogicalOperator(Table *table) : table_(table) {}

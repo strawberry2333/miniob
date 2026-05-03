@@ -30,6 +30,11 @@ See the Mulan PSL v2 for more details. */
 using namespace std;
 using namespace common;
 
+/**
+ * @file optimize_stage.cpp
+ * @brief SQL 优化阶段的主流程实现。
+ */
+
 RC OptimizeStage::handle_request(SQLStageEvent *sql_event)
 {
   unique_ptr<LogicalOperator> logical_operator;
@@ -45,6 +50,7 @@ RC OptimizeStage::handle_request(SQLStageEvent *sql_event)
   ASSERT(logical_operator, "logical operator is null");
 
   // TODO: unify the RBO and CBO
+  // 先跑基于规则的轻量改写，再根据 session 选 RBO 还是级联优化。
   rc = rewrite(logical_operator);
   if (rc != RC::SUCCESS) {
     LOG_WARN("failed to rewrite plan. rc=%s", strrc(rc));
@@ -111,6 +117,7 @@ RC OptimizeStage::rewrite(unique_ptr<LogicalOperator> &logical_operator)
   bool change_made = false;
   do {
     change_made = false;
+    // 某条规则改写成功后会重新从规则列表头部开始，直到进入不动点状态。
     rc          = rewriter_.rewrite(logical_operator, change_made);
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to do expression rewrite on logical plan. rc=%s", strrc(rc));

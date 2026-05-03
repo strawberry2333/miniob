@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/table/table_meta.h"
 #include "json/json.h"
 
+/**
+ * @file index_meta.cpp
+ * @brief 索引元数据的校验、序列化和反序列化实现。
+ */
+
 const static Json::StaticString FIELD_NAME("name");
 const static Json::StaticString FIELD_FIELD_NAME("field_name");
 

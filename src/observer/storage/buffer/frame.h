@@ -26,6 +26,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/buffer/page.h"
 
 /**
+ * @file frame.h
+ * @brief 定义页帧对象及其锁、pin 和脏页状态。
+ */
+
+/**
  * @brief 页帧标识符
  * @ingroup BufferPool
  */
@@ -137,6 +142,7 @@ public:
 
   char *data() { return page_.data; }
 
+  /// @brief 当前页是否允许被淘汰；只有 pin count 降到 0 时才可驱逐。
   bool can_purge() { return pin_count_.load() == 0; }
 
   /**

@@ -28,6 +28,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/scalar_group_by_physical_operator.h"
 #include "sql/operator/hash_group_by_physical_operator.h"
 
+/**
+ * @file implementation_rules.cpp
+ * @brief 级联优化器中 logical->physical 规则的具体转换实现。
+ */
+
 // -------------------------------------------------------------------------------------------------
 // PhysicalSeqScan
 // -------------------------------------------------------------------------------------------------
@@ -44,6 +49,7 @@ void LogicalGetToPhysicalSeqScan::transform(OperatorNode* input,
   vector<unique_ptr<Expression>> &log_preds = table_get_oper->predicates();
   vector<unique_ptr<Expression>> phys_preds;
   for (auto &pred : log_preds) {
+    // 规则转换不能窃取逻辑表达式所有权，因此这里复制一份谓词表达式。
     phys_preds.push_back(pred->copy());
   }
 
@@ -76,6 +82,7 @@ void LogicalProjectionToProjection::transform(OperatorNode* input,
 
   auto project_operator = make_unique<ProjectPhysicalOperator>(std::move(project_oper->expressions()));
   if (project_operator) {
+    // 物理节点在 memo 中只挂接统一 child 视图，真正的所有权仍由 memo 外层管理。
     project_operator->add_general_child(child_opers.front().get());
   }
 

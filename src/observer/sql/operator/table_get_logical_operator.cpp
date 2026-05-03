@@ -16,6 +16,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/property.h"
 #include "catalog/catalog.h"
 
+/**
+ * @file table_get_logical_operator.cpp
+ * @brief 逻辑取表节点的属性与谓词绑定实现。
+ */
+
 TableGetLogicalOperator::TableGetLogicalOperator(Table *table, ReadWriteMode mode)
     : LogicalOperator(), table_(table), mode_(mode)
 {}
@@ -28,6 +33,7 @@ void TableGetLogicalOperator::set_predicates(vector<unique_ptr<Expression>> &&ex
 unique_ptr<LogicalProperty> TableGetLogicalOperator::find_log_prop(const vector<LogicalProperty*> &log_props)
 {
   int card = Catalog::get_instance().get_table_stats(table_->table_id()).row_nums;
+  // 当前只使用表级统计信息，尚未根据下推谓词进一步修正基数。
   // TODO: think about predicates.
   return make_unique<LogicalProperty>(card);
 }

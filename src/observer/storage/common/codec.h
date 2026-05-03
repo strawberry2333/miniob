@@ -20,11 +20,26 @@ See the Mulan PSL v2 for more details. */
 #include <cstring>
 #include <algorithm>
 
+/**
+ * @file codec.h
+ * @brief 提供保持排序语义的二进制编解码工具。
+ * @details OrderedCode 会把整数、浮点数、字符串等值编码成可直接做字典序比较的字节串，
+ * 常用于 LSM/索引键编码。编码或解码失败时统一返回 `RC::INVALID_ARGUMENT`。
+ */
+
 using byte_t    = unsigned char;
 using bytes     = vector<byte_t>;
 using float64_t = double_t;
 
-// reference: https://github.com/code0xff/orderedcodepp
+/**
+ * @brief 有序编码工具。
+ * @details 对任意支持的类型，编码后的字节序列满足：
+ * 1. 原值升序时，编码字节串也按字典序升序；
+ * 2. 通过 `decreasing` 方向位可反转排序方向；
+ * 3. 解析函数会原地推进输入 span，便于流式解码复合键。
+ *
+ * reference: https://github.com/code0xff/orderedcodepp
+ */
 class OrderedCode
 {
 public:
@@ -63,11 +78,13 @@ public:
   struct trailing_string : string
   {};
 
+  /// @brief 对字节序列逐字节取反，用于反向排序编码。
   static void invert(span<byte_t> &s)
   {
     std::for_each(s.begin(), s.end(), [](byte_t &c) { c ^= 0xff; });
   }
 
+  /// @brief 将无符号整数按有序格式追加到输出缓冲区。
   static RC append(bytes &s, uint64_t x)
   {
     vector<byte_t> buf(9);
@@ -80,6 +97,7 @@ public:
     return RC::SUCCESS;
   }
 
+  /// @brief 将有符号整数编码成字典序可比较的字节串。
   static RC append(bytes &s, int64_t x)
   {
     if (x >= -64 && x < 64) {
@@ -117,6 +135,8 @@ public:
     return RC::SUCCESS;
   }
 
+  /// @brief 将浮点数重解释为整数后复用整数编码。
+  /// @details `NaN` 没有稳定全序关系，因此被视为非法输入。
   static RC append(bytes &s, float64_t x)
   {
     RC rc = RC::SUCCESS;
@@ -137,6 +157,7 @@ public:
     return rc;
   }
 
+  /// @brief 编码字符串并对 `0x00/0xff` 做转义，保证前缀无歧义。
   static RC append(bytes &s, const string &x)
   {
     auto l = x.begin();
@@ -158,18 +179,21 @@ public:
     return RC::SUCCESS;
   }
 
+  /// @brief 追加原样尾串，通常用于复合键末尾不再需要终止符的场景。
   static RC append(bytes &s, const trailing_string &x)
   {
     s.insert(s.end(), x.begin(), x.end());
     return RC::SUCCESS;
   }
 
+  /// @brief 编码正无穷哨兵值，便于做开区间上界。
   static RC append(bytes &s, const infinity &_)
   {
     s.insert(s.end(), &inf[0], &inf[0] + 2);
     return RC::SUCCESS;
   }
 
+  /// @brief 根据是否为无穷上界在字符串和无穷哨兵间切换编码。
   static RC append(bytes &s, const string_or_infinity &x)
   {
     RC rc = RC::SUCCESS;
@@ -191,6 +215,7 @@ public:
     return rc;
   }
 
+  /// @brief 从有序字节串解析一个有符号整数，并前移输入 span。
   static RC parse(span<byte_t> &s, byte_t dir, int64_t &dst)
   {
     if (s.empty()) {
@@ -243,6 +268,7 @@ public:
     return RC::SUCCESS;
   }
 
+  /// @brief 从有序字节串解析一个无符号整数，并前移输入 span。
   static RC parse(span<byte_t> &s, byte_t dir, uint64_t &dst)
   {
     RC rc = RC::SUCCESS;

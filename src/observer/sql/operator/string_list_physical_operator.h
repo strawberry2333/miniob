@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/physical_operator.h"
 
 /**
+ * @file string_list_physical_operator.h
+ * @brief 把若干字符串行包装成结果集的辅助算子。
+ */
+
+/**
  * @brief 字符串列表物理算子
  * @ingroup PhysicalOperator
  * @details 用于将字符串列表转换为物理算子,为了方便实现的接口，比如help命令
@@ -32,6 +37,7 @@ public:
   template <typename InputIt>
   void append(InputIt begin, InputIt end)
   {
+    // 每次 append 追加一整行字符串列。
     strings_.emplace_back(begin, end);
   }
 
@@ -73,7 +79,7 @@ public:
     const StringList &string_list = *iterator_;
     vector<Value>     cells;
     for (const string &s : string_list) {
-
+      // 每次访问当前行时按需构造 ValueListTuple，避免长期持有冗余 `Value` 对象。
       Value value(s.c_str());
       cells.push_back(value);
     }

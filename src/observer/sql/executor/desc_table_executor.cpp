@@ -25,12 +25,18 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file desc_table_executor.cpp
+ * @brief 实现表结构查看命令的执行逻辑。
+ */
+
 RC DescTableExecutor::execute(SQLStageEvent *sql_event)
 {
   RC            rc            = RC::SUCCESS;
   Stmt         *stmt          = sql_event->stmt();
   SessionEvent *session_event = sql_event->session_event();
   Session      *session       = session_event->session();
+  // 这里只接受 resolve 阶段构造出的 DescTableStmt。
   ASSERT(stmt->type() == StmtType::DESC_TABLE,
       "desc table executor can not run this command: %d",
       static_cast<int>(stmt->type()));
@@ -39,6 +45,7 @@ RC DescTableExecutor::execute(SQLStageEvent *sql_event)
   SqlResult     *sql_result      = session_event->sql_result();
   const char    *table_name      = desc_table_stmt->table_name().c_str();
 
+  // 先解析出目标表；存在时再构造一个只读结果集返回给客户端。
   Db    *db    = session->get_current_db();
   Table *table = db->find_table(table_name);
   if (table != nullptr) {
@@ -49,6 +56,7 @@ RC DescTableExecutor::execute(SQLStageEvent *sql_event)
 
     sql_result->set_tuple_schema(tuple_schema);
 
+    // `DESC` 的结果本质上是一张纯字符串表，这里用 `StringListPhysicalOperator` 拼出来。
     auto             oper       = new StringListPhysicalOperator;
     const TableMeta &table_meta = table->table_meta();
     for (int i = table_meta.sys_field_num(); i < table_meta.field_num(); i++) {
@@ -58,7 +66,7 @@ RC DescTableExecutor::execute(SQLStageEvent *sql_event)
 
     sql_result->set_operator(unique_ptr<PhysicalOperator>(oper));
   } else {
-
+    // 表不存在时直接返回命令错误，不再构造结果集。
     sql_result->set_return_code(RC::SCHEMA_TABLE_NOT_EXIST);
     sql_result->set_state_string("Table not exists");
   }

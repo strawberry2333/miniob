@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/field/field.h"
 
 /**
+ * @file project_logical_operator.h
+ * @brief 逻辑投影节点。
+ */
+
+/**
  * @brief project 表示投影运算
  * @ingroup LogicalOperator
  * @details 从表中获取数据后，可能需要过滤，投影，连接等等。
@@ -26,6 +31,7 @@ See the Mulan PSL v2 for more details. */
 class ProjectLogicalOperator : public LogicalOperator
 {
 public:
+  /// @brief 接管查询输出表达式列表。
   ProjectLogicalOperator(vector<unique_ptr<Expression>> &&expressions);
   virtual ~ProjectLogicalOperator() = default;
 

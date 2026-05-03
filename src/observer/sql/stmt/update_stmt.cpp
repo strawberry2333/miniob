@@ -14,13 +14,18 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/stmt/update_stmt.h"
 
+/**
+ * @file update_stmt.cpp
+ * @brief `UPDATE` 语句的占位实现。
+ */
+
 UpdateStmt::UpdateStmt(Table *table, Value *values, int value_amount)
     : table_(table), values_(values), value_amount_(value_amount)
 {}
 
 RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
 {
-  // TODO
+  // 当前仓库还没有完成 UPDATE 的完整语义绑定，因此这里显式保留未实现状态。
   stmt = nullptr;
   return RC::INTERNAL;
 }

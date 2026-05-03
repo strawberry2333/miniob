@@ -17,5 +17,15 @@ See the Mulan PSL v2 for more details. */
 #include "common/conf/ini.h"
 #include "common/os/process_param.h"
 
+/**
+ * @brief observer 进程初始化入口。
+ * @param processParam 启动参数集合，包含配置文件、协议、线程模型等运行期开关。
+ * @return 0 表示初始化成功，非 0 表示初始化失败。
+ */
 int  init(common::ProcessParam *processParam);
+
+/**
+ * @brief observer 进程收尾入口。
+ * @details 负责释放 init() 创建的全局对象、配置和日志资源。
+ */
 void cleanup();

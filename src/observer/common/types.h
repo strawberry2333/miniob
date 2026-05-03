@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include <inttypes.h>
 #include <stdint.h>
 
+/**
+ * @brief observer 存储与执行层共享的基础类型定义。
+ * @details 这些别名和枚举被广泛用于页管理、存储格式、执行模式等跨模块接口。
+ */
+
 /// 磁盘文件，包括存放数据的文件和索引(B+-Tree)文件，都按照页来组织
 /// 每一页都有一个编号，称为PageNum
 using PageNum = int32_t;

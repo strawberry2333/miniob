@@ -15,6 +15,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/clog/log_entry.h"
 #include "common/log/log.h"
 
+/**
+ * @file log_entry.cpp
+ * @brief 通用日志对象的初始化和格式化实现。
+ */
+
 ////////////////////////////////////////////////////////////////////////////////
 // struct LogHeader
 
@@ -40,6 +45,7 @@ LogEntry::LogEntry()
 
 LogEntry::LogEntry(LogEntry &&other)
 {
+  // move 后把源对象重置为空日志，避免后续误把旧 header 当成有效内容使用。
   header_ = other.header_;
   data_ = std::move(other.data_);
 
@@ -74,6 +80,7 @@ RC LogEntry::init(LSN lsn, LogModule module, vector<char> &&data)
     return RC::INVALID_ARGUMENT;
   }
 
+  // header 和 payload 始终同步初始化；写文件时直接按这两部分顺序落盘。
   header_.lsn = lsn;
   header_.module_id = module.index();
   header_.size = static_cast<int32_t>(data.size());

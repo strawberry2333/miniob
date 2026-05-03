@@ -20,16 +20,23 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/create_index_stmt.h"
 #include "storage/table/table.h"
 
+/**
+ * @file create_index_executor.cpp
+ * @brief 实现索引创建命令的执行逻辑。
+ */
+
 RC CreateIndexExecutor::execute(SQLStageEvent *sql_event)
 {
   Stmt    *stmt    = sql_event->stmt();
   Session *session = sql_event->session_event()->session();
+  // 这里假定 resolve 阶段已经把语法节点转成了合法的 CreateIndexStmt。
   ASSERT(stmt->type() == StmtType::CREATE_INDEX,
       "create index executor can not run this command: %d",
       static_cast<int>(stmt->type()));
 
   CreateIndexStmt *create_index_stmt = static_cast<CreateIndexStmt *>(stmt);
 
+  // 从会话中拿到事务对象，再把索引元信息交给 table 层执行真正的 schema 变更。
   Trx   *trx   = session->current_trx();
   Table *table = create_index_stmt->table();
   return table->create_index(trx, create_index_stmt->field_meta(), create_index_stmt->index_name().c_str());

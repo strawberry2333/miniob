@@ -25,6 +25,16 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file one_thread_per_connection_thread_handler.cpp
+ * @brief 每连接一线程模型的实现。
+ */
+
+/**
+ * @brief 绑定单个连接生命周期的工作线程。
+ * @details Worker 持有连接对象的非拥有指针，真正的释放由宿主 ThreadHandler 在
+ * close_connection 中完成。
+ */
 class Worker
 {
 public:
@@ -34,6 +44,7 @@ public:
   ~Worker()
   {
     if (thread_ != nullptr) {
+      // 防御式收尾：如果上层忘记显式停止，这里也尽量让后台线程退出。
       stop();
       join();
     }
@@ -55,7 +66,7 @@ public:
   {
     if (thread_) {
       if (thread_->get_id() == this_thread::get_id()) {
-        thread_->detach(); // 如果当前线程join当前线程，就会卡死
+        thread_->detach(); // 当前 worker 线程在自清理路径上不能 join 自己，否则会死锁。
       } else {
         thread_->join();
       }
@@ -79,6 +90,7 @@ public:
     poll_fd.revents = 0;
 
     while (running_) {
+      // 每个 worker 独占一个连接，所以可以直接同步 poll/read/execute/write。
       int ret = poll(&poll_fd, 1, 500);
       if (ret < 0) {
         LOG_WARN("poll error. fd = %d, ret = %d, error=%s", poll_fd.fd, ret, strerror(errno));
@@ -93,6 +105,7 @@ public:
         break;
       }
 
+      // handle_event 负责完整走完“收包 -> SQL 执行 -> 回包”闭环。
       RC rc = task_handler_.handle_event(communicator_);
       if (OB_FAIL(rc)) {
         LOG_ERROR("handle error. rc = %s", strrc(rc));
@@ -101,7 +114,7 @@ public:
     }
 
     LOG_INFO("worker thread stop. communicator = %p", communicator_);
-    host_.close_connection(communicator_); /// 连接关闭后，当前对象会被删除
+    host_.close_connection(communicator_); /// 连接关闭后，当前 Worker/Communicator 都会走清理路径。
   }
 
 private:
@@ -129,7 +142,7 @@ RC OneThreadPerConnectionThreadHandler::new_connection(Communicator *communicato
   }
 
   Worker *worker = new Worker(*this, communicator);
-  thread_map_[communicator] = worker;
+  thread_map_[communicator] = worker;  // 先登记，再启动线程，保证异常时能按统一路径回收。
   return worker->start();
 }
 
@@ -147,6 +160,7 @@ RC OneThreadPerConnectionThreadHandler::close_connection(Communicator *communica
   thread_map_.erase(iter);
   lock_.unlock();
 
+  // 先把连接从映射中摘掉，再等待线程退出，避免其它路径继续命中这个连接。
   worker->stop();
   worker->join();
   delete worker;
@@ -160,6 +174,7 @@ RC OneThreadPerConnectionThreadHandler::stop()
   lock_guard guard(lock_);
   for (auto iter = thread_map_.begin(); iter != thread_map_.end(); ++iter) {
     Worker *worker = iter->second;
+    // 这里只发停止信号；真正退出要等 worker 自己从 poll 中醒来并清理连接。
     worker->stop();
   }
   return RC::SUCCESS;
@@ -169,6 +184,7 @@ RC OneThreadPerConnectionThreadHandler::await_stop()
 {
   LOG_INFO("begin to await stop one thread per connection thread handler");
   while (!thread_map_.empty()) {
+    // 连接由各自 worker 异步关闭，这里只等待映射表清空。
     this_thread::sleep_for(chrono::milliseconds(100));
   }
   LOG_INFO("end to await stop one thread per connection thread handler");

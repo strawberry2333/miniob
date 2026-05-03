@@ -20,6 +20,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/trx/trx.h"
 #include "json/json.h"
 
+/**
+ * @file table_meta.cpp
+ * @brief 表元数据的构造、序列化和反序列化实现。
+ */
+
 static const Json::StaticString FIELD_TABLE_ID("table_id");
 static const Json::StaticString FIELD_TABLE_NAME("table_name");
 static const Json::StaticString FIELD_STORAGE_FORMAT("storage_format");
@@ -71,6 +76,7 @@ RC TableMeta::init(int32_t table_id, const char *name, const vector<FieldMeta> *
     fields_.resize(attributes.size() + trx_fields->size());
     for (size_t i = 0; i < trx_fields->size(); i++) {
       const FieldMeta &field_meta = (*trx_fields)[i];
+      // 事务隐藏列始终排在用户字段前面，并按最终物理布局重新计算 offset。
       fields_[i] = FieldMeta(field_meta.name(), field_meta.type(), field_offset, field_meta.len(), false /*visible*/, field_meta.field_id());
       field_offset += field_meta.len();
     }
@@ -82,7 +88,7 @@ RC TableMeta::init(int32_t table_id, const char *name, const vector<FieldMeta> *
 
   for (size_t i = 0; i < attributes.size(); i++) {
     const AttrInfoSqlNode &attr_info = attributes[i];
-    // `i` is the col_id of fields[i]
+    // `i` 也是该用户字段的逻辑列号，后续 PAX 列索引与表达式层都会依赖它。
     rc = fields_[i + trx_field_num].init(
       attr_info.name.c_str(), attr_info.type, field_offset, attr_info.length, true /*visible*/, i);
     if (OB_FAIL(rc)) {
@@ -180,6 +186,7 @@ int TableMeta::serialize(ostream &ss) const
   table_value[FIELD_STORAGE_FORMAT] = static_cast<int>(storage_format_);
   table_value[FIELD_STORAGE_ENGINE] = static_cast<int>(storage_engine_);
 
+  // 元数据文件中同时保留字段、索引、主键和引擎信息，便于单文件恢复整个表定义。
   Json::Value fields_value;
   for (const FieldMeta &field : fields_) {
     Json::Value field_value;
@@ -248,6 +255,7 @@ int TableMeta::deserialize(istream &is)
     return -1;
   }
 
+  // 先校验结构，再逐段恢复字段、索引和主键，避免得到半初始化对象。
   const Json::Value &storage_format_value = table_value[FIELD_STORAGE_FORMAT];
   if (!storage_format_value.isInt()) {
     LOG_ERROR("Invalid storage format. json value=%s", storage_format_value.toStyledString().c_str());

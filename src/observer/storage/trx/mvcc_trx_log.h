@@ -29,6 +29,11 @@ class MvccTrx;
 class LogEntry;
 
 /**
+ * @file mvcc_trx_log.h
+ * @brief 定义 MVCC 事务日志格式、写入辅助类与回放器。
+ */
+
+/**
  * @brief 表示各种操作类型
  * @ingroup CLog
  */

@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/field/field.h"
 #include "storage/record/record.h"
 
+/**
+ * @file predicate_physical_operator.cpp
+ * @brief 行式谓词过滤算子的执行逻辑。
+ */
+
 PredicatePhysicalOperator::PredicatePhysicalOperator(std::unique_ptr<Expression> expr) : expression_(std::move(expr))
 {
   ASSERT(expression_->value_type() == AttrType::BOOLEANS, "predicate's expression should be BOOLEAN type");
@@ -52,6 +57,7 @@ RC PredicatePhysicalOperator::next()
       return rc;
     }
 
+    // 只有当前 tuple 满足布尔谓词时，当前算子才对外暴露这一行。
     if (value.get_boolean()) {
       return rc;
     }

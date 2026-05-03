@@ -16,9 +16,20 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/logical_operator.h"
 
+/**
+ * @file group_by_logical_operator.h
+ * @brief `GROUP BY` 逻辑算子。
+ */
+
+/**
+ * @brief 描述分组列和聚合输出列的逻辑节点。
+ * @details `LogicalPlanGenerator::create_group_by_plan` 会把查询表达式中扫描到的
+ * `AggregateExpr` 和显式 `GROUP BY` 列交给它统一保存。
+ */
 class GroupByLogicalOperator : public LogicalOperator
 {
 public:
+  /// @brief 接管分组列表达式和聚合表达式指针集合。
   GroupByLogicalOperator(vector<unique_ptr<Expression>> &&group_by_exprs, vector<Expression *> &&expressions);
 
   virtual ~GroupByLogicalOperator() = default;

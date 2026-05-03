@@ -17,8 +17,14 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/create_table_stmt.h"
 #include "event/sql_debug.h"
 
+/**
+ * @file create_table_stmt.cpp
+ * @brief 实现 `CREATE TABLE` 的语义对象构造。
+ */
+
 RC CreateTableStmt::create(Db *db, const CreateTableSqlNode &create_table, Stmt *&stmt)
 {
+  // resolve 阶段主要负责把存储格式文本转换为内部枚举，并保留其余 parse 结果。
   StorageFormat storage_format = get_storage_format(create_table.storage_format.c_str());
   if (storage_format == StorageFormat::UNKNOWN_FORMAT) {
     return RC::INVALID_ARGUMENT;
@@ -29,6 +35,7 @@ RC CreateTableStmt::create(Db *db, const CreateTableSqlNode &create_table, Stmt 
 }
 
 StorageFormat CreateTableStmt::get_storage_format(const char *format_str) {
+  // 空字符串沿用默认行存格式，其余情况按关键字做大小写不敏感匹配。
   StorageFormat format = StorageFormat::UNKNOWN_FORMAT;
   if (strlen(format_str) == 0) {
     format = StorageFormat::ROW_FORMAT;

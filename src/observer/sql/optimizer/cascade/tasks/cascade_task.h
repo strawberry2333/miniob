@@ -19,6 +19,11 @@ class OptimizerContext;
 class Memo;
 class RuleWithPromise;
 
+/**
+ * @file cascade_task.h
+ * @brief 级联优化器任务抽象。
+ */
+
 enum class CascadeTaskType
 {
   OPTIMIZE_GROUP,
@@ -33,6 +38,7 @@ class CascadeTask
 public:
   CascadeTask(OptimizerContext *context, CascadeTaskType type) : type_(type), context_(context) {}
 
+  /// @brief 执行任务本体，具体逻辑由派生类定义。
   virtual void perform() = 0;
 
   Memo &get_memo() const;

@@ -9,3 +9,8 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "sql/optimizer/predicate_to_join_rule.h"
+
+/**
+ * @file predicate_to_join_rule.cpp
+ * @brief 预留的谓词转 join 规则实现文件。
+ */

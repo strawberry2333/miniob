@@ -16,6 +16,11 @@ See the Mulan PSL v2 for more details. */
 #include "session/session.h"
 #include "session/thread_data.h"
 
+/**
+ * @file frame.cpp
+ * @brief 页帧 pin 计数、访问时间和读写锁实现。
+ */
+
 FrameId::FrameId(int buffer_pool_id, PageNum page_num) : buffer_pool_id_(buffer_pool_id), page_num_(page_num) {}
 
 bool FrameId::equal_to(const FrameId &other) const
@@ -51,6 +56,7 @@ intptr_t get_default_debug_xid()
 #endif
   Session *session = Session::current_session();
   if (session == nullptr) {
+    // 没有 session 时退化为线程粒度标识，便于调试锁重入和死锁。
     return reinterpret_cast<intptr_t>(reinterpret_cast<void *>(pthread_self()));
   } else {
     return reinterpret_cast<intptr_t>(session);
@@ -63,6 +69,7 @@ void Frame::write_latch(intptr_t xid)
 {
   {
     scoped_lock debug_lock(debug_lock_);
+    // 进入页锁前先做调试态断言，尽早暴露“未 pin 就加锁”或读写锁升级错误。
     ASSERT(pin_count_.load() > 0,
         "frame lock. write lock failed while pin count is invalid. "
         "this=%p, pin=%d, frameId=%s, xid=%lx, lbt=%s",
@@ -212,6 +219,7 @@ void Frame::pin()
 {
   scoped_lock debug_lock(debug_lock_);
 
+  // pin 是页不被淘汰的唯一引用计数来源，不和页锁语义混用。
   [[maybe_unused]] intptr_t xid       = get_default_debug_xid();
   [[maybe_unused]] int      pin_count = ++pin_count_;
 
@@ -232,6 +240,7 @@ int Frame::unpin()
 
   scoped_lock debug_lock(debug_lock_);
 
+  // 调用方必须自行保证成对出现；这里仅做计数回收，不主动触发刷盘。
   int pin_count = --pin_count_;
   TRACE("after frame unpin. "
         "this=%p, write locker=%lx, read locker has xid? %d, pin=%d, frameId=%s, xid=%lx, lbt=%s",

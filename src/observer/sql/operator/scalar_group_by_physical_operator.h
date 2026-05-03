@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/group_by_physical_operator.h"
 
 /**
+ * @file scalar_group_by_physical_operator.h
+ * @brief 无 `GROUP BY` 列时的标量聚合算子。
+ */
+
+/**
  * @brief 没有 group by 表达式的 group by 物理算子
  * @ingroup PhysicalOperator
  */
@@ -30,6 +35,7 @@ public:
   OpType               get_op_type() const override { return OpType::SCALARGROUPBY; }
 
   RC open(Trx *trx) override;
+  /// @brief 该算子最多只输出一行聚合结果。
   RC next() override;
   RC close() override;
 

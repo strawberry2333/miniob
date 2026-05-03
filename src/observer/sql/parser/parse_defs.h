@@ -23,6 +23,13 @@ See the Mulan PSL v2 for more details. */
 class Expression;
 
 /**
+ * @file parse_defs.h
+ * @brief 定义 SQL 解析阶段产出的中间语法节点。
+ * @details 这些类型尽量贴近 SQL 文本结构，后续会在 resolve/bind 阶段再转换成
+ * 绑定过表、字段和表达式语义的 `Stmt` 对象。
+ */
+
+/**
  * @defgroup SQLParser SQL Parser
  */
 
@@ -221,10 +228,10 @@ struct DescTableSqlNode
  */
 struct LoadDataSqlNode
 {
-  string relation_name;
-  string file_name;
-  string terminated = ",";
-  string enclosed   = "\"";
+  string relation_name;          ///< 导入目标表
+  string file_name;              ///< 数据文件路径
+  string terminated = ",";       ///< 解析层记录字段分隔符文本
+  string enclosed   = "\"";      ///< 解析层记录文本包裹符文本
 };
 
 /**
@@ -259,9 +266,9 @@ struct ExplainSqlNode
  */
 struct ErrorSqlNode
 {
-  string error_msg;
-  int    line;
-  int    column;
+  string error_msg;  ///< bison 返回的语法错误描述
+  int    line;       ///< 错误所在行
+  int    column;     ///< 错误起始列
 };
 
 /**
@@ -294,44 +301,64 @@ enum SqlCommandFlag
   SCF_EXPLAIN,
   SCF_SET_VARIABLE,  ///< 设置变量
 };
+
 /**
  * @brief 表示一个SQL语句
  * @ingroup SQLParser
+ * @details 这是 parse 阶段的“统一外壳”。
+ * `flag` 指明当前节点真正承载的是哪一种 SQL 结构，其他成员仅在对应 flag 下有效。
  */
 class ParsedSqlNode
 {
 public:
-  enum SqlCommandFlag flag;
-  ErrorSqlNode        error;
-  CalcSqlNode         calc;
-  SelectSqlNode       selection;
-  InsertSqlNode       insertion;
-  DeleteSqlNode       deletion;
-  UpdateSqlNode       update;
-  CreateTableSqlNode  create_table;
-  DropTableSqlNode    drop_table;
-  AnalyzeTableSqlNode analyze_table;
-  CreateIndexSqlNode  create_index;
-  DropIndexSqlNode    drop_index;
-  DescTableSqlNode    desc_table;
-  LoadDataSqlNode     load_data;
-  ExplainSqlNode      explain;
-  SetVariableSqlNode  set_variable;
+  enum SqlCommandFlag flag;          ///< 当前节点代表的 SQL 类型
+  ErrorSqlNode        error;         ///< 语法错误节点载荷
+  CalcSqlNode         calc;          ///< CALC 节点载荷
+  SelectSqlNode       selection;     ///< SELECT 节点载荷
+  InsertSqlNode       insertion;     ///< INSERT 节点载荷
+  DeleteSqlNode       deletion;      ///< DELETE 节点载荷
+  UpdateSqlNode       update;        ///< UPDATE 节点载荷
+  CreateTableSqlNode  create_table;  ///< CREATE TABLE 节点载荷
+  DropTableSqlNode    drop_table;    ///< DROP TABLE 节点载荷
+  AnalyzeTableSqlNode analyze_table; ///< ANALYZE TABLE 节点载荷
+  CreateIndexSqlNode  create_index;  ///< CREATE INDEX 节点载荷
+  DropIndexSqlNode    drop_index;    ///< DROP INDEX 节点载荷
+  DescTableSqlNode    desc_table;    ///< DESC TABLE 节点载荷
+  LoadDataSqlNode     load_data;     ///< LOAD DATA 节点载荷
+  ExplainSqlNode      explain;       ///< EXPLAIN 节点载荷
+  SetVariableSqlNode  set_variable;  ///< SET VARIABLE 节点载荷
 
 public:
+  /**
+   * @brief 构造一个默认错误节点。
+   */
   ParsedSqlNode();
+
+  /**
+   * @brief 构造指定 SQL 类型的节点壳。
+   * @param flag 目标 SQL 类型。
+   */
   explicit ParsedSqlNode(SqlCommandFlag flag);
 };
 
 /**
  * @brief 表示语法解析后的数据
  * @ingroup SQLParser
+ * @details 解析层理论上可以容纳多条 SQL，但当前执行链路只消费第一条。
  */
 class ParsedSqlResult
 {
 public:
+  /**
+   * @brief 追加一条解析完成的 SQL 节点。
+   * @param sql_node 解析得到的 SQL 语法树根节点。
+   */
   void add_sql_node(unique_ptr<ParsedSqlNode> sql_node);
 
+  /**
+   * @brief 访问解析结果列表。
+   * @return 返回内部 SQL 节点数组的可写引用。
+   */
   vector<unique_ptr<ParsedSqlNode>> &sql_nodes() { return sql_nodes_; }
 
 private:

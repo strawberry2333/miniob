@@ -19,9 +19,14 @@ See the Mulan PSL v2 for more details. */
 class SQLStageEvent;
 
 /**
- * @brief 创建索引的执行器
+ * @file create_index_executor.h
+ * @brief 定义 `CREATE INDEX` 命令执行器。
+ */
+
+/**
+ * @brief 创建索引的命令执行器。
  * @ingroup Executor
- * @note 创建索引时不能做其它操作。MiniOB当前不完善，没有对一些并发做控制，包括schema的并发。
+ * @note 创建索引时不能做其它操作。MiniOB 当前没有完整的 schema 并发控制。
  */
 class CreateIndexExecutor
 {
@@ -29,5 +34,10 @@ public:
   CreateIndexExecutor()          = default;
   virtual ~CreateIndexExecutor() = default;
 
+  /**
+   * @brief 执行 `CREATE INDEX`。
+   * @param sql_event 当前 SQL 请求上下文。
+   * @return 返回底层 `Table::create_index` 的执行结果。
+   */
   RC execute(SQLStageEvent *sql_event);
 };

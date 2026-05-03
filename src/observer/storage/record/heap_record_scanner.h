@@ -15,6 +15,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/trx/trx.h"
 
 /**
+ * @file heap_record_scanner.h
+ * @brief 定义基于页式记录管理器的全表扫描器。
+ */
+
+/**
  * @brief 遍历某个文件中所有记录
  * @ingroup RecordManager
  * @details 遍历所有的页面，同时访问这些页面中所有的记录
@@ -53,11 +58,13 @@ public:
 private:
   /**
    * @brief 获取该文件中的下一条记录
+   * @details 会在页之间推进，并结合过滤条件与事务可见性跳过无效记录。
    */
   RC fetch_next_record();
 
   /**
    * @brief 获取一个页面内的下一条记录
+   * @details 只在当前已初始化页面内推进，不负责切换到下一页。
    */
   RC fetch_next_record_in_page();
 

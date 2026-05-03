@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/rules.h"
 #include "sql/optimizer/cascade/property_set.h"
 
+/**
+ * @file group_expr.h
+ * @brief memo 中单个表达式实例的封装。
+ */
+
 // TODO: rename to m_expr(in columbia)?
 /* GroupExpr used to represent a particular logical or physical
  * operator expression.
@@ -51,6 +56,7 @@ public:
 
   double get_cost() const { return lowest_cost_; }
 
+  /// @brief 用当前表达式的更优总代价刷新本地最优值。
   void set_local_cost(double cost)
   {
     if (cost < lowest_cost_) {
@@ -68,6 +74,7 @@ public:
 
   void set_rule_explored(Rule *rule) { rule_mask_.set(rule->get_rule_idx(), true); }
 
+  /// @brief 判断某条规则是否已经在该表达式上尝试过。
   bool rule_explored(Rule *rule) { return rule_mask_.test(rule->get_rule_idx()); }
 
   size_t get_children_groups_size() const { return child_groups_.size(); }
@@ -77,6 +84,7 @@ public:
 private:
   int group_id_{};
 
+  /// @brief 指向逻辑或物理算子的真实节点内容。
   OperatorNode *contents_{};
 
   std::vector<int> child_groups_;

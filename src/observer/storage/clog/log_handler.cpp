@@ -19,8 +19,14 @@ See the Mulan PSL v2 for more details. */
 #include "storage/clog/disk_log_handler.h"
 #include "storage/clog/vacuous_log_handler.h"
 
+/**
+ * @file log_handler.cpp
+ * @brief 日志抽象基类的公共辅助实现。
+ */
+
 RC LogHandler::append(LSN &lsn, LogModule::Id module, span<const char> data)
 {
+  // span 重载只负责复制到可移动缓冲区，真正的持久化策略仍由子类 `_append` 决定。
   vector<char> data_vec(data.begin(), data.end());
   return append(lsn, module, std::move(data_vec));
 }

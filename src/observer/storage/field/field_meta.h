@@ -23,8 +23,15 @@ class Value;
 }  // namespace Json
 
 /**
- * @brief 字段元数据
- *
+ * @file field_meta.h
+ * @brief 定义字段元数据及其序列化接口。
+ */
+
+/**
+ * @brief 描述一列在记录中的逻辑和物理布局。
+ * @details `FieldMeta` 同时承担两类职责：
+ * 1. 运行时描述字段名称、类型、偏移与长度；
+ * 2. 作为表元数据的一部分持久化到 JSON。
  */
 class FieldMeta
 {
@@ -33,6 +40,10 @@ public:
   FieldMeta(const char *name, AttrType attr_type, int attr_offset, int attr_len, bool visible, int field_id);
   ~FieldMeta() = default;
 
+  /**
+   * @brief 初始化字段元数据。
+   * @details 会校验名称、类型和物理布局参数；失败时不会写入不完整状态。
+   */
   RC init(const char *name, AttrType attr_type, int attr_offset, int attr_len, bool visible, int field_id);
 
 public:
@@ -44,10 +55,13 @@ public:
   int         field_id() const;
 
 public:
+  /// @brief 按可读格式输出字段描述，供日志和调试使用。
   void desc(ostream &os) const;
 
 public:
+  /// @brief 序列化到 JSON 元数据对象。
   void      to_json(Json::Value &json_value) const;
+  /// @brief 从 JSON 元数据对象恢复字段定义；格式不合法时返回错误。
   static RC from_json(const Json::Value &json_value, FieldMeta &field);
 
 protected:

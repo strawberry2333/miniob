@@ -23,6 +23,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/string_list_physical_operator.h"
 
 /**
+ * @file mysql_communicator.cpp
+ * @brief MySQL 文本协议的握手、命令读取与结果集编码实现。
+ */
+
+/**
  * @brief MySQL协议相关实现
  * @defgroup MySQLProtocol
  */
@@ -118,6 +123,7 @@ enum enum_field_types
  */
 int store_int1(char *buf, int8_t value)
 {
+  // MySQL 基本包使用小端编码；这里直接按内存字节布局写入。
   *buf = value;
   return 1;
 }
@@ -274,6 +280,7 @@ int store_lenenc_string(char *buf, const char *s)
 {
   int len = static_cast<int>(strlen(s));
   int pos = store_lenenc_int(buf, len);
+  // 长度编码之后紧跟原始字节序列，中间没有额外 terminator。
   store_fix_length_string(buf + pos, s, len);
   return pos + len;
 }
@@ -348,7 +355,7 @@ struct HandshakeV10 : public BasePacket
 
     char *buf = net_packet.data();
     int   pos = 0;
-    pos += 3; // skip packet length
+    pos += 3; // 前 3 字节稍后回填 payload length。
 
     pos += store_int1(buf + pos, packet_header.sequence_id);
     pos += store_int1(buf + pos, protocol);
@@ -529,9 +536,9 @@ struct QueryPacket
  */
 RC decode_query_packet(vector<char> &net_packet, QueryPacket &query_packet)
 {
-  // query field is a null terminated string
+  // COM_QUERY 的 payload 形式为 command byte + SQL 文本，不包含额外头部。
   query_packet.query.assign(net_packet.data() + 1, net_packet.size() - 1);
-  query_packet.query.append(1, ';');
+  query_packet.query.append(1, ';');  // 现有 SQL 流水线默认按分号结尾的文本处理。
   return RC::SUCCESS;
 }
 
@@ -542,6 +549,7 @@ RC decode_query_packet(vector<char> &net_packet, QueryPacket &query_packet)
  */
 RC create_version_comment_sql_result(SqlResult *sql_result)
 {
+  // 一些 MySQL 客户端在连接建立后会主动探测 @@version_comment，这里构造一个静态结果响应。
   TupleSchema   tuple_schema;
   TupleCellSpec cell_spec("", "", "@@version_comment");
   tuple_schema.append_cell(cell_spec);
@@ -581,7 +589,7 @@ RC MysqlCommunicator::init(int fd, unique_ptr<Session> session, const string &ad
     return rc;
   }
 
-  writer_->flush();
+  writer_->flush();  // 握手包必须立即发出，客户端才能继续发送认证包。
 
   return rc;
 }
@@ -614,7 +622,7 @@ RC MysqlCommunicator::read_event(SessionEvent *&event)
 {
   RC rc = RC::SUCCESS;
 
-  /// 读取一个完整的数据包
+  /// MySQL 基本协议以“4 字节包头 + payload”为单位收发，这里一次读取一个完整包。
   PacketHeader packet_header;
 
   int ret = common::readn(fd_, &packet_header, sizeof(packet_header));
@@ -626,7 +634,7 @@ RC MysqlCommunicator::read_event(SessionEvent *&event)
 
   LOG_TRACE("read packet header. length=%d, sequence_id=%d, payload_length=%d, fd=%d",
             sizeof(packet_header), packet_header.sequence_id, packet_header.payload_length, fd_);
-  sequence_id_ = packet_header.sequence_id + 1;
+  sequence_id_ = packet_header.sequence_id + 1;  // 后续服务端回复必须延续客户端包序号。
 
   vector<char> buf(packet_header.payload_length);
   ret = common::readn(fd_, buf.data(), packet_header.payload_length);
@@ -638,13 +646,13 @@ RC MysqlCommunicator::read_event(SessionEvent *&event)
 
   event = nullptr;
   if (!authed_) {
-    /// 还没有做过认证，就先需要完成握手阶段
+    /// 连接建立后的第一包是客户端握手响应，还没有进入正常 SQL 命令阶段。
     uint32_t client_flag = *(uint32_t *)buf.data();  // TODO should use decode (little endian as default)
     LOG_INFO("client handshake response with capabilities flag=%d", client_flag);
     /// 经过测试sysbench 虽然发出的鉴权包中带了CLIENT_DEPRECATE_EOF标记，但是在接收row result set 时，
     //  不能识别最后一个OK Packet。强制清除该标识，表现正常
     client_capabilities_flag_ = (client_flag & (~CLIENT_DEPRECATE_EOF));
-    // send ok packet and return
+    // 这里没有真正做用户名/密码校验，而是直接接受握手并切换到命令阶段。
     OkPacket ok_packet;
     ok_packet.packet_header.sequence_id = sequence_id_;
 
@@ -661,7 +669,7 @@ RC MysqlCommunicator::read_event(SessionEvent *&event)
   int8_t command_type = buf[0];
   LOG_TRACE("recv command from client =%d", command_type);
 
-  /// 已经做过握手，接收普通的消息包
+  /// 已经做过握手，后续进入命令阶段。当前只实现 COM_QUERY 文本协议。
   if (command_type == 0x03) {  // COM_QUERY，这是一个普通的文本请求
     QueryPacket query_packet;
     rc = decode_query_packet(buf, query_packet);
@@ -672,14 +680,15 @@ RC MysqlCommunicator::read_event(SessionEvent *&event)
 
     LOG_TRACE("query command: %s", query_packet.query.c_str());
     if (query_packet.query.find("select @@version_comment") != string::npos) {
+      // 这个查询在很多客户端启动时自动发送，直接在协议层短路可减少 SQL 链路开销。
       bool need_disconnect;
       return handle_version_comment(need_disconnect);
     }
 
     event = new SessionEvent(this);
-    event->set_query(query_packet.query);
+    event->set_query(query_packet.query);  // 交给统一 SQL 流水线处理。
   } else {
-    /// 其它的非文本请求，暂时不支持
+    /// 其它非文本请求暂时不支持，但尽量回复一个 OK 避免客户端直接断开。
     OkPacket ok_packet(sequence_id_);
     rc = send_packet(ok_packet);
     if (rc != RC::SUCCESS) {
@@ -707,12 +716,13 @@ RC MysqlCommunicator::write_state(SessionEvent *event, bool &need_disconnect)
 
   RC rc = RC::SUCCESS;
   if (sql_result->return_code() == RC::SUCCESS) {
-
+    // 成功时走 OK packet；客户端据此读取 affected rows、session state 等信息。
     OkPacket ok_packet;
     ok_packet.packet_header.sequence_id = sequence_id_++;
     ok_packet.info.assign(buf);
     rc = send_packet(ok_packet);
   } else {
+    // 失败时映射成 ERR packet，保留内部错误码和可读错误文本。
     ErrPacket err_packet;
     err_packet.packet_header.sequence_id = sequence_id_++;
     err_packet.error_code                = static_cast<int>(sql_result->return_code());
@@ -738,7 +748,7 @@ RC MysqlCommunicator::write_result(SessionEvent *event, bool &need_disconnect)
   need_disconnect       = true;
   SqlResult *sql_result = event->sql_result();
   if (nullptr == sql_result) {
-
+    // 理论上不会发生；为了兼容已有流程，仍返回一个普通 OK 包而不是直接断连。
     const char *response = "Unexpected error: no result";
     const int   len      = strlen(response);
     OkPacket    ok_packet;  // TODO if error occurs, we should send an error packet to client
@@ -755,7 +765,7 @@ RC MysqlCommunicator::write_result(SessionEvent *event, bool &need_disconnect)
       return write_state(event, need_disconnect);
     }
 
-    // send result set
+    // 正常结果集路径：先 open，再按 MySQL 文本协议发送列定义和每一行数据。
     // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query_response_text_resultset.html
     RC rc = sql_result->open();
     if (rc != RC::SUCCESS) {
@@ -769,7 +779,7 @@ RC MysqlCommunicator::write_result(SessionEvent *event, bool &need_disconnect)
       // maybe a dml that send nothing to client
     } else {
 
-      // send metadata : Column Definition
+      // 结果集非空时，客户端必须先收到列数和每列的元信息。
       rc = send_column_definition(sql_result, need_disconnect);
       if (rc != RC::SUCCESS) {
         sql_result->close();
@@ -792,7 +802,7 @@ RC MysqlCommunicator::send_packet(const BasePacket &packet)
 {
   vector<char> net_packet;
 
-  RC rc = packet.encode(client_capabilities_flag_, net_packet);
+  RC rc = packet.encode(client_capabilities_flag_, net_packet);  // 编码逻辑由具体 packet 类型决定。
   if (rc != RC::SUCCESS) {
     LOG_WARN("failed to encode ok packet. rc=%s", strrc(rc));
     return rc;
@@ -850,6 +860,7 @@ RC MysqlCommunicator::send_column_definition(SqlResult *sql_result, bool &need_d
   store_int3(buf, payload_length);
   net_packet.resize(pos);
 
+  // 第一个包只告诉客户端后面会有多少个 Column Definition 包。
   rc = writer_->writen(net_packet.data(), net_packet.size());
   if (OB_FAIL(rc)) {
     LOG_WARN("failed to send column count to client. addr=%s, error=%s", addr(), strerror(errno));
@@ -881,6 +892,7 @@ RC MysqlCommunicator::send_column_definition(SqlResult *sql_result, bool &need_d
     int16_t     flags            = 0;
     int8_t      decimals         = 0x1f;
 
+    // Column Definition 按协议固定顺序编码 catalog/schema/table/name/type 等元信息。
     pos += store_lenenc_string(buf + pos, catalog);
     pos += store_lenenc_string(buf + pos, schema);
     pos += store_lenenc_string(buf + pos, table);
@@ -942,17 +954,18 @@ RC MysqlCommunicator::send_result_rows(SessionEvent *event, SqlResult *sql_resul
   RC rc = RC::SUCCESS;
 
   vector<char> packet;
-  packet.resize(4 * 1024 * 1024);  // TODO warning: length cannot be fix
+  packet.resize(4 * 1024 * 1024);  // 行包复用一块大缓冲，避免每行重复分配。
 
   int    affected_rows = 0;
   if (event->session()->get_execution_mode() == ExecutionMode::CHUNK_ITERATOR
       && event->session()->used_chunk_mode()) {
+    // chunk 模式适合矢量化执行器，按批次读取结果再逐行回包。
     rc = write_chunk_result(sql_result, packet, affected_rows, need_disconnect);
   } else {
     rc = write_tuple_result(sql_result, packet, affected_rows, need_disconnect);
   }
 
-  // 所有行发送完成后，发送一个EOF或OK包
+  // 所有行发送完成后，发送一个 EOF 或 OK 包作为结果集结束标记。
   if ((client_capabilities_flag_ & CLIENT_DEPRECATE_EOF) || no_column_def) {
     LOG_TRACE("client has CLIENT_DEPRECATE_EOF or has empty column, send ok packet");
     OkPacket ok_packet;
@@ -985,9 +998,7 @@ RC MysqlCommunicator::write_tuple_result(SqlResult *sql_result, vector<char> &pa
       continue;
     }
 
-    // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query_response_text_resultset.html
-    // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query_response_text_resultset_row.html
-    // note: if some field is null, send a 0xFB
+    // MySQL 文本结果集一行对应一个 packet，行内每个字段都按 length-encoded string 编码。
     char *buf = packet.data();
     int   pos = 0;
 
@@ -1002,6 +1013,7 @@ RC MysqlCommunicator::write_tuple_result(SqlResult *sql_result, vector<char> &pa
         break;  // TODO send error packet
       }
 
+      // value.to_string() 的结果直接作为文本协议字段值写入。
       pos += store_lenenc_string(buf + pos, value.to_string().c_str());
     }
 
@@ -1027,9 +1039,7 @@ RC MysqlCommunicator::write_chunk_result(SqlResult *sql_result, vector<char> &pa
     }
     for (int i = 0; i < chunk.rows(); i++) {
       affected_rows++;
-      // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query_response_text_resultset.html
-      // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query_response_text_resultset_row.html
-      // note: if some field is null, send a 0xFB
+      // chunk 是按批次获取的，但协议仍然要求按“每行一个 packet”输出。
       char *buf = packet.data();
       int   pos = 0;
 

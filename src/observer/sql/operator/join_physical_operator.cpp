@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/join_physical_operator.h"
 
+/**
+ * @file join_physical_operator.cpp
+ * @brief 旧版嵌套循环连接实现。
+ */
+
 NestedLoopJoinPhysicalOperator::NestedLoopJoinPhysicalOperator() {}
 
 RC NestedLoopJoinPhysicalOperator::open(Trx *trx)

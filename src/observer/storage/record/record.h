@@ -28,6 +28,11 @@ See the Mulan PSL v2 for more details. */
 class Field;
 
 /**
+ * @file record.h
+ * @brief 定义记录标识 RID 以及记录缓冲区对象。
+ */
+
+/**
  * @brief 标识一个记录的位置
  * 一个记录是放在某个文件的某个页面的某个槽位。这里不记录文件信息，记录页面和槽位信息
  */
@@ -172,11 +177,19 @@ public:
     return *this;
   }
 
+  /**
+   * @brief 让 Record 引用外部数据缓冲区。
+   * @details 当前对象不会接管 `data` 的释放责任，调用方需确保外部缓冲区在使用期间有效。
+   */
   void set_data(char *data, int len = 0)
   {
     this->data_ = data;
     this->len_  = len;
   }
+  /**
+   * @brief 让 Record 接管一段堆内存。
+   * @details 若 Record 当前已拥有其它缓冲区，会先释放旧资源再绑定新内存。
+   */
   void set_data_owner(char *data, int len)
   {
     ASSERT(len != 0, "the len of data should not be 0");
@@ -187,6 +200,10 @@ public:
     this->owner_ = true;
   }
 
+  /**
+   * @brief 深拷贝一份记录数据到内部缓冲区。
+   * @details 分配失败时返回 `RC::NOMEM`，不会破坏 Record 之前的有效数据。
+   */
   RC copy_data(const char *data, int len)
   {
     ASSERT(len!= 0, "the len of data should not be 0");
@@ -201,6 +218,7 @@ public:
     return RC::SUCCESS;
   }
 
+  /// @brief 为一条新记录申请可写缓冲区。
   RC new_record(int len)
   {
     ASSERT(len!= 0, "the len of data should not be 0");
@@ -213,6 +231,7 @@ public:
     return RC::SUCCESS;
   }
 
+  /// @brief 在 Record 自有缓冲区中覆写指定字段区域。
   RC set_field(int field_offset, int field_len, char *data)
   {
     if (!owner_) {
@@ -228,6 +247,7 @@ public:
     return RC::SUCCESS;
   }
 
+  /// @brief 将指定字段区域清零，常用于回滚或逻辑删除标记清理。
   RC reset_filed(int field_offset, int field_len)
   {
     if (!owner_) {

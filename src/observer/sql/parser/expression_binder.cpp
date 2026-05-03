@@ -20,8 +20,14 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file expression_binder.cpp
+ * @brief 实现表达式从“文本名字”到“具体表/字段/聚合语义”的绑定过程。
+ */
+
 Table *BinderContext::find_table(const char *table_name) const
 {
+  // `FROM` 子句内的表名匹配按大小写不敏感处理，和 SQL 词法层保持一致。
   auto pred = [table_name](Table *table) { return 0 == strcasecmp(table_name, table->name()); };
   auto iter = ranges::find_if(query_tables_, pred);
   if (iter == query_tables_.end()) {
@@ -33,6 +39,7 @@ Table *BinderContext::find_table(const char *table_name) const
 ////////////////////////////////////////////////////////////////////////////////
 static void wildcard_fields(Table *table, vector<unique_ptr<Expression>> &expressions)
 {
+  // 星号展开只产出用户字段，跳过隐藏的系统列。
   const TableMeta &table_meta = table->table_meta();
   const int        field_num  = table_meta.field_num();
   for (int i = table_meta.sys_field_num(); i < field_num; i++) {
@@ -49,6 +56,7 @@ RC ExpressionBinder::bind_expression(unique_ptr<Expression> &expr, vector<unique
     return RC::SUCCESS;
   }
 
+  // 绑定入口只做一次类型分派，真正的名字解析和子树改写交给具体 handler。
   switch (expr->type()) {
     case ExprType::STAR: {
       return bind_star_expression(expr, bound_expressions);
@@ -111,6 +119,7 @@ RC ExpressionBinder::bind_star_expression(
 
   const char *table_name = star_expr->table_name();
   if (!is_blank(table_name) && 0 != strcmp(table_name, "*")) {
+    // `table.*` 只展开指定表，先确认这张表确实出现在当前查询范围内。
     Table *table = context_.find_table(table_name);
     if (nullptr == table) {
       LOG_INFO("no such table in from list: %s", table_name);
@@ -119,6 +128,7 @@ RC ExpressionBinder::bind_star_expression(
 
     tables_to_wildcard.push_back(table);
   } else {
+    // 裸 `*` 需要按 `FROM` 列表顺序展开所有表的可见字段。
     const vector<Table *> &all_tables = context_.query_tables();
     tables_to_wildcard.insert(tables_to_wildcard.end(), all_tables.begin(), all_tables.end());
   }
@@ -144,6 +154,7 @@ RC ExpressionBinder::bind_unbound_field_expression(
 
   Table *table = nullptr;
   if (is_blank(table_name)) {
+    // 没写表名前缀时，当前实现只接受单表查询，避免字段歧义。
     if (context_.query_tables().size() != 1) {
       LOG_INFO("cannot determine table for field: %s", field_name);
       return RC::SCHEMA_TABLE_NOT_EXIST;
@@ -159,8 +170,10 @@ RC ExpressionBinder::bind_unbound_field_expression(
   }
 
   if (0 == strcmp(field_name, "*")) {
+    // `table.*` 在未绑定字段表达式里也复用星号展开逻辑。
     wildcard_fields(table, bound_expressions);
   } else {
+    // 普通列引用会被改写成持有 `Field` 的已绑定表达式。
     const FieldMeta *field_meta = table->table_meta().field(field_name);
     if (nullptr == field_meta) {
       LOG_INFO("no such field in table: %s.%s", table_name, field_name);
@@ -179,6 +192,7 @@ RC ExpressionBinder::bind_unbound_field_expression(
 RC ExpressionBinder::bind_field_expression(
     unique_ptr<Expression> &field_expr, vector<unique_ptr<Expression>> &bound_expressions)
 {
+  // 已绑定字段无需改写，直接转移到输出列表即可。
   bound_expressions.emplace_back(std::move(field_expr));
   return RC::SUCCESS;
 }
@@ -186,6 +200,7 @@ RC ExpressionBinder::bind_field_expression(
 RC ExpressionBinder::bind_value_expression(
     unique_ptr<Expression> &value_expr, vector<unique_ptr<Expression>> &bound_expressions)
 {
+  // 常量表达式不依赖 schema，上层直接消费即可。
   bound_expressions.emplace_back(std::move(value_expr));
   return RC::SUCCESS;
 }
@@ -202,6 +217,7 @@ RC ExpressionBinder::bind_cast_expression(
   vector<unique_ptr<Expression>> child_bound_expressions;
   unique_ptr<Expression>        &child_expr = cast_expr->child();
 
+  // 先绑定子表达式，再把可能被改写过的子节点重新挂回 CAST 表达式。
   RC rc = bind_expression(child_expr, child_bound_expressions);
   if (rc != RC::SUCCESS) {
     return rc;
@@ -235,6 +251,7 @@ RC ExpressionBinder::bind_comparison_expression(
   unique_ptr<Expression>        &left_expr  = comparison_expr->left();
   unique_ptr<Expression>        &right_expr = comparison_expr->right();
 
+  // 比较表达式要求左右两侧都各自绑定成一个确定的表达式节点。
   RC rc = bind_expression(left_expr, child_bound_expressions);
   if (rc != RC::SUCCESS) {
     return rc;
@@ -266,6 +283,7 @@ RC ExpressionBinder::bind_comparison_expression(
     right_expr.reset(right.release());
   }
 
+  // 左右两棵子树绑定完成后，再把整体比较表达式交给上层。
   bound_expressions.emplace_back(std::move(expr));
   return RC::SUCCESS;
 }
@@ -282,6 +300,7 @@ RC ExpressionBinder::bind_conjunction_expression(
   vector<unique_ptr<Expression>>  child_bound_expressions;
   vector<unique_ptr<Expression>> &children = conjunction_expr->children();
 
+  // 逻辑表达式的每个子节点都要被原地绑定；当前要求每个子节点只能收敛成一个表达式。
   for (unique_ptr<Expression> &child_expr : children) {
     child_bound_expressions.clear();
 
@@ -319,6 +338,7 @@ RC ExpressionBinder::bind_arithmetic_expression(
   unique_ptr<Expression>        &left_expr  = arithmetic_expr->left();
   unique_ptr<Expression>        &right_expr = arithmetic_expr->right();
 
+  // 算术表达式与比较表达式类似，都需要先绑定左右子树再回填。
   RC rc = bind_expression(left_expr, child_bound_expressions);
   if (OB_FAIL(rc)) {
     return rc;
@@ -419,9 +439,11 @@ RC ExpressionBinder::bind_aggregate_expression(
   vector<unique_ptr<Expression>> child_bound_expressions;
 
   if (child_expr->type() == ExprType::STAR && aggregate_type == AggregateExpr::Type::COUNT) {
+    // `COUNT(*)` 在语义上只关心行数，因此改写成 `COUNT(1)` 更方便统一执行。
     ValueExpr *value_expr = new ValueExpr(Value(1));
     child_expr.reset(value_expr);
   } else {
+    // 其他聚合函数需要先绑定它的参数表达式。
     rc = bind_expression(child_expr, child_bound_expressions);
     if (OB_FAIL(rc)) {
       return rc;
@@ -437,6 +459,7 @@ RC ExpressionBinder::bind_aggregate_expression(
     }
   }
 
+  // 把未绑定聚合表达式改写成真正的 `AggregateExpr`，再做一轮语义合法性校验。
   auto aggregate_expr = make_unique<AggregateExpr>(aggregate_type, std::move(child_expr));
   aggregate_expr->set_name(unbound_aggregate_expr->name());
   rc = check_aggregate_expression(*aggregate_expr);

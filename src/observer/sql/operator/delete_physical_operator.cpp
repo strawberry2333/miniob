@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/table/table.h"
 #include "storage/trx/trx.h"
 
+/**
+ * @file delete_physical_operator.cpp
+ * @brief 删除算子的执行逻辑。
+ */
+
 RC DeletePhysicalOperator::open(Trx *trx)
 {
   if (children_.empty()) {
@@ -42,6 +47,7 @@ RC DeletePhysicalOperator::open(Trx *trx)
 
     RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
     Record   &record    = row_tuple->record();
+    // 先收集待删记录，避免边扫描边删除导致子算子迭代状态失效。
     records_.emplace_back(std::move(record));
   }
 

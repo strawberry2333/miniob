@@ -27,6 +27,14 @@ class DeleteStmt;
 class ExplainStmt;
 class LogicalOperator;
 
+/**
+ * @file logical_plan_generator.h
+ * @brief 从语义分析后的 `Stmt` 生成逻辑计划树。
+ */
+
+/**
+ * @brief 根据不同语句类型构建逻辑算子树。
+ */
 class LogicalPlanGenerator
 {
 public:
@@ -36,6 +44,7 @@ public:
   RC create(Stmt *stmt, unique_ptr<LogicalOperator> &logical_operator);
 
 private:
+  /// @brief 为 `SELECT` 语句构建 scan/filter/group by/project 逻辑树。
   RC create_plan(CalcStmt *calc_stmt, unique_ptr<LogicalOperator> &logical_operator);
   RC create_plan(SelectStmt *select_stmt, unique_ptr<LogicalOperator> &logical_operator);
   RC create_plan(FilterStmt *filter_stmt, unique_ptr<LogicalOperator> &logical_operator);

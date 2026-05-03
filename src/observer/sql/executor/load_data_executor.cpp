@@ -22,6 +22,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file load_data_executor.cpp
+ * @brief 实现批量导入文件到表的执行逻辑。
+ */
+
 RC LoadDataExecutor::execute(SQLStageEvent *sql_event)
 {
   RC            rc         = RC::SUCCESS;
@@ -29,6 +34,7 @@ RC LoadDataExecutor::execute(SQLStageEvent *sql_event)
   LoadDataStmt *stmt       = static_cast<LoadDataStmt *>(sql_event->stmt());
   Table        *table      = stmt->table();
   const char   *file_name  = stmt->filename();
+  // `LoadDataStmt` 已经完成目标表与文件参数解析，这里只负责真正的导入流程。
   load_data(table, file_name, stmt->terminated(), stmt->enclosed(), sql_result);
   return rc;
 }
@@ -44,21 +50,22 @@ RC LoadDataExecutor::execute(SQLStageEvent *sql_event)
 RC insert_record_from_file(
     Table *table, vector<string> &file_values, vector<Value> &record_values, stringstream &errmsg)
 {
-
   const int field_num     = record_values.size();
   const int sys_field_num = table->table_meta().sys_field_num();
 
+  // 文件列数不足以填满表字段时，直接报 schema mismatch。
   if (file_values.size() < record_values.size()) {
     return RC::SCHEMA_FIELD_MISSING;
   }
 
   RC rc = RC::SUCCESS;
 
-  stringstream deserialize_stream;
+  // 先把文本列逐一转换成对应类型的 `Value`，后续再统一拼装成 record。
   for (int i = 0; i < field_num && RC::SUCCESS == rc; i++) {
     const FieldMeta *field = table->table_meta().field(i + sys_field_num);
 
     string &file_value = file_values[i];
+    // 非字符串列沿用现有实现先做 strip，兼容文件中常见的空白字符。
     if (field->type() != AttrType::CHARS) {
       common::strip(file_value);
     }
@@ -71,6 +78,7 @@ RC insert_record_from_file(
 
   if (RC::SUCCESS == rc) {
     Record record;
+    // 先构造存储层 record，再真正插入到表中。
     rc = table->make_record(field_num, record_values.data(), record);
     if (rc != RC::SUCCESS) {
       errmsg << "insert failed.";
@@ -85,7 +93,7 @@ RC insert_record_from_file(
 // TODO: pax format and row format
 void LoadDataExecutor::load_data(Table *table, const char *file_name, char terminated, char enclosed, SqlResult *sql_result)
 {
-  // your code here
+  // `terminated` / `enclosed` 已经通过接口传入，当前实现仍保留原有按行和固定分隔符拆分的行为。
   stringstream result_string;
 
   fstream fs;
@@ -102,13 +110,13 @@ void LoadDataExecutor::load_data(Table *table, const char *file_name, char termi
   const int sys_field_num = table->table_meta().sys_field_num();
   const int field_num     = table->table_meta().field_num() - sys_field_num;
 
-  vector<Value>       record_values(field_num);
-  string              line;
+  vector<Value>  record_values(field_num);
+  string         line;
   vector<string> file_values;
-  const string        delim("|");
-  int                      line_num        = 0;
-  int                      insertion_count = 0;
-  RC                       rc              = RC::SUCCESS;
+  const string   delim("|");
+  int            line_num        = 0;
+  int            insertion_count = 0;
+  RC             rc              = RC::SUCCESS;
   while (!fs.eof() && RC::SUCCESS == rc) {
     getline(fs, line);
     line_num++;
@@ -116,11 +124,13 @@ void LoadDataExecutor::load_data(Table *table, const char *file_name, char termi
       continue;
     }
 
+    // 现有实现按固定 `|` 分列，与解析层保留的参数设置保持兼容但尚未完全打通。
     file_values.clear();
     common::split_string(line, delim, file_values);
     stringstream errmsg;
 
     if (table->table_meta().storage_format() == StorageFormat::ROW_FORMAT) {
+      // 行存格式按“文本列 -> Value -> Record -> insert”的路径逐条导入。
       rc = insert_record_from_file(table, file_values, record_values, errmsg);
       if (rc != RC::SUCCESS) {
         result_string << "Line:" << line_num << " insert record failed:" << errmsg.str() << ". error:" << strrc(rc)
@@ -133,6 +143,7 @@ void LoadDataExecutor::load_data(Table *table, const char *file_name, char termi
       // Todo: 参照insert_record_from_file实现
       rc = RC::UNIMPLEMENTED;
     } else {
+      // 未知存储格式由执行层直接终止导入。
       rc = RC::UNSUPPORTED;
       result_string << "Unsupported storage format: " << strrc(rc) << endl;
     }
@@ -144,6 +155,7 @@ void LoadDataExecutor::load_data(Table *table, const char *file_name, char termi
   if (RC::SUCCESS == rc) {
     result_string << strrc(rc);
   }
+  // 保持现有行为：日志里记录导入结果，对外返回码固定写入 `SqlResult`。
   LOG_INFO("load data done. row num: %s, result: %s", insertion_count, strrc(rc));
   sql_result->set_return_code(RC::SUCCESS);
 }

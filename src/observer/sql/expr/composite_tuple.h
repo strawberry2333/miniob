@@ -17,9 +17,14 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/tuple.h"
 
 /**
+ * @file composite_tuple.h
+ * @brief 把多个 tuple 拼成一个逻辑 tuple 的适配器。
+ */
+
+/**
  * @brief 组合的Tuple
  * @ingroup Tuple
- * TODO 单元测试
+ * @details join/group by 在保留原始输入列并拼接额外结果列时都会用到它。
  */
 class CompositeTuple : public Tuple
 {
@@ -37,12 +42,17 @@ public:
   /// @brief 保留移动赋值函数
   CompositeTuple &operator=(CompositeTuple &&) = default;
 
+  /// @brief 返回所有子 tuple 的列数总和。
   int cell_num() const override;
+  /// @brief 通过顺序展开的方式定位全局列号对应的子 tuple。
   RC  cell_at(int index, Value &cell) const override;
   RC  spec_at(int index, TupleCellSpec &spec) const override;
+  /// @brief 依次在每个子 tuple 中查找指定列。
   RC  find_cell(const TupleCellSpec &spec, Value &cell) const override;
 
+  /// @brief 追加一个拥有所有权的子 tuple。
   void   add_tuple(unique_ptr<Tuple> tuple);
+  /// @brief 直接访问某个子 tuple，供调用方复用已缓存的数据。
   Tuple &tuple_at(size_t index);
 
 private:

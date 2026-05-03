@@ -20,6 +20,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file load_data_stmt.cpp
+ * @brief 实现 `LOAD DATA` 的语义绑定和基础参数校验。
+ */
+
 RC LoadDataStmt::create(Db *db, const LoadDataSqlNode &load_data, Stmt *&stmt)
 {
   RC rc = RC::SUCCESS;
@@ -32,17 +37,20 @@ RC LoadDataStmt::create(Db *db, const LoadDataSqlNode &load_data, Stmt *&stmt)
   }
 
   // check whether the table exists
+  // 第 1 步：把目标表名绑定到具体表对象。
   Table *table = db->find_table(table_name);
   if (nullptr == table) {
     LOG_WARN("no such table. db=%s, table_name=%s", db->name(), table_name);
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
 
+  // 第 2 步：在 resolve 阶段就提前验证文件存在且可读，避免执行阶段再晚失败。
   if (0 != access(load_data.file_name.c_str(), R_OK)) {
     LOG_WARN("no such file to load. file name=%s, error=%s", load_data.file_name.c_str(), strerror(errno));
     return RC::FILE_NOT_EXIST;
   }
 
+  // 第 3 步：当前语法层会把引号也保留下来，因此这里按既有约定检查长度是否为 3。
   if (load_data.enclosed.size() != 3) {
     LOG_WARN("load data invalid enclosed. enclosed=%s", load_data.enclosed.c_str());
     return RC::INVALID_ARGUMENT;
@@ -52,6 +60,7 @@ RC LoadDataStmt::create(Db *db, const LoadDataSqlNode &load_data, Stmt *&stmt)
     return RC::INVALID_ARGUMENT;
   }
 
+  // 第 4 步：提取真正的单字符分隔符/包裹符，构造最终 stmt。
   stmt = new LoadDataStmt(table, load_data.file_name.c_str(), load_data.terminated[1], load_data.enclosed[1]);
   return rc;
 }

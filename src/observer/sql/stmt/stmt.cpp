@@ -31,8 +31,14 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/trx_begin_stmt.h"
 #include "sql/stmt/trx_end_stmt.h"
 
+/**
+ * @file stmt.cpp
+ * @brief 实现 parse 节点到具体 `Stmt` 子类的集中分发。
+ */
+
 bool stmt_type_ddl(StmtType type)
 {
+  // 这里把会修改 schema 的语句集中列出来，供执行层决定是否在成功后做同步。
   switch (type) {
     case StmtType::CREATE_TABLE:
     case StmtType::DROP_TABLE:
@@ -49,6 +55,7 @@ RC Stmt::create_stmt(Db *db, ParsedSqlNode &sql_node, Stmt *&stmt)
 {
   stmt = nullptr;
 
+  // resolve 阶段统一通过这张分发表，把 parse 结果映射到具体语义对象。
   switch (sql_node.flag) {
     case SCF_INSERT: {
       return InsertStmt::create(db, sql_node.insertion, stmt);
@@ -114,6 +121,7 @@ RC Stmt::create_stmt(Db *db, ParsedSqlNode &sql_node, Stmt *&stmt)
     }
 
     default: {
+      // 某些命令还没有实现时，保留未实现状态给上游决定如何处理。
       LOG_INFO("Command::type %d doesn't need to create statement.", sql_node.flag);
     } break;
   }

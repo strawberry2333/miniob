@@ -20,7 +20,12 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/stmt.h"
 
 /**
- * @brief Help 语句，现在什么成员都没有
+ * @file help_stmt.h
+ * @brief 定义 `HELP` 语句的语义对象。
+ */
+
+/**
+ * @brief 表示内置帮助命令。
  * @ingroup Statement
  */
 class HelpStmt : public Stmt
@@ -31,6 +36,9 @@ public:
 
   StmtType type() const override { return StmtType::HELP; }
 
+  /**
+   * @brief 创建一个无状态的帮助语句对象。
+   */
   static RC create(Stmt *&stmt)
   {
     stmt = new HelpStmt();

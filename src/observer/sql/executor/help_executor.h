@@ -21,7 +21,12 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/string_list_physical_operator.h"
 
 /**
- * @brief Help语句执行器
+ * @file help_executor.h
+ * @brief 定义 `HELP` 命令执行器。
+ */
+
+/**
+ * @brief 输出内置帮助信息的命令执行器。
  * @ingroup Executor
  */
 class HelpExecutor
@@ -30,8 +35,14 @@ public:
   HelpExecutor()          = default;
   virtual ~HelpExecutor() = default;
 
+  /**
+   * @brief 生成一张只读帮助结果表。
+   * @param sql_event 当前 SQL 请求上下文。
+   * @return 总是返回 `RC::SUCCESS`。
+   */
   RC execute(SQLStageEvent *sql_event)
   {
+    // 这里维护的是一个纯文本帮助列表，每一项会输出成结果集中的一行。
     const char *strings[] = {"show tables;",
         "desc `table name`;",
         "create table `table name` (`column name` `column type`, ...);",
@@ -42,12 +53,14 @@ public:
         "select [ * | `columns` ] from `table`;"};
 
     auto oper = new StringListPhysicalOperator();
+    // 逐条填充帮助文本，后续由结果集统一迭代输出。
     for (size_t i = 0; i < sizeof(strings) / sizeof(strings[0]); i++) {
       oper->append(strings[i]);
     }
 
     SqlResult *sql_result = sql_event->session_event()->sql_result();
 
+    // 帮助结果只有一列，列名固定为 `Commands`。
     TupleSchema schema;
     schema.append_cell("Commands");
 

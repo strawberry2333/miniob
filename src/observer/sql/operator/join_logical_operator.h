@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/logical_operator.h"
 
 /**
+ * @file join_logical_operator.h
+ * @brief 逻辑连接算子。
+ */
+
+/**
  * @brief 连接算子
  * @ingroup LogicalOperator
  * @details 连接算子，用于连接两个表。对应的物理算子或者实现，可能有NestedLoopJoin，HashJoin等等。
@@ -63,6 +68,7 @@ public:
       auto &right     = pred_expr->right();
       if (pred_expr->comp() == CompOp::EQUAL_TO && left->type() == ExprType::FIELD &&
           right->type() == ExprType::FIELD) {
+        // 等值连接粗略按最大基数做一次缩减，供级联优化器估算 join 输出规模。
         card /= std::max(std::max(left_log_prop->get_card(), right_log_prop->get_card()), 1);
       }
     }

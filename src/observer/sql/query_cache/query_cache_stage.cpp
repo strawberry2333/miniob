@@ -23,7 +23,13 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file query_cache_stage.cpp
+ * @brief 查询缓存阶段的空实现。
+ */
+
 RC QueryCacheStage::handle_request(SQLStageEvent *sql_event)
 {
+  // 当前没有缓存命中逻辑，所有请求都直接透传到后续阶段。
   return RC::SUCCESS;
 }

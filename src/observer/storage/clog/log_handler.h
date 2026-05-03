@@ -30,6 +30,11 @@ class LogReplayer;
 class LogEntry;
 
 /**
+ * @file log_handler.h
+ * @brief 定义日志系统统一抽象接口。
+ */
+
+/**
  * @brief 对外提供服务的CLog模块
  * @ingroup CLog
  * @details 该模块负责日志的写入、读取、回放等功能。
@@ -96,6 +101,7 @@ public:
 
   virtual LSN current_lsn() const = 0;
 
+  /// @brief 根据配置名称创建具体日志处理器实现。
   static RC create(const char *name, LogHandler *&handler);
 
 private:

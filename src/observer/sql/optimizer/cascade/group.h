@@ -20,6 +20,11 @@ See the Mulan PSL v2 for more details. */
 
 class GroupExpr;
 class Memo;
+
+/**
+ * @file group.h
+ * @brief memo 中等价表达式组的定义。
+ */
 /**
  * @class Group
  *
@@ -93,6 +98,7 @@ public:
 
   GroupExpr *get_logical_expression();
 
+  /// @brief 返回该等价类共享的逻辑属性。
   LogicalProperty *get_logical_prop() { return logical_prop_.get(); }
 
   ///< dump the group info, for debug

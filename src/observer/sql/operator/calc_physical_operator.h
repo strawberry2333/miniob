@@ -17,6 +17,14 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/expression_tuple.h"
 #include "sql/operator/physical_operator.h"
 
+/**
+ * @file calc_physical_operator.h
+ * @brief 纯表达式计算的物理算子。
+ */
+
+/**
+ * @brief 把一组常量/可折叠表达式作为单行结果集输出。
+ */
 class CalcPhysicalOperator : public PhysicalOperator
 {
 public:
@@ -42,6 +50,7 @@ public:
     }
     emitted_ = true;
 
+    // 主动触发表达式求值，确保错误会在 `next` 阶段而不是取 tuple 时暴露。
     int cell_num = tuple_.cell_num();
     for (int i = 0; i < cell_num; i++) {
       Value value;

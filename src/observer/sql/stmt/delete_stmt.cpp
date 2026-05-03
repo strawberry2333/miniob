@@ -18,10 +18,16 @@ See the Mulan PSL v2 for more details. */
 #include "storage/db/db.h"
 #include "storage/table/table.h"
 
+/**
+ * @file delete_stmt.cpp
+ * @brief 实现 `DELETE` 语句的语义绑定。
+ */
+
 DeleteStmt::DeleteStmt(Table *table, FilterStmt *filter_stmt) : table_(table), filter_stmt_(filter_stmt) {}
 
 DeleteStmt::~DeleteStmt()
 {
+  // FilterStmt 由 DeleteStmt 独占持有，析构时负责释放。
   if (nullptr != filter_stmt_) {
     delete filter_stmt_;
     filter_stmt_ = nullptr;
@@ -37,16 +43,19 @@ RC DeleteStmt::create(Db *db, const DeleteSqlNode &delete_sql, Stmt *&stmt)
   }
 
   // check whether the table exists
+  // 第 1 步：把目标表名解析成具体 Table。
   Table *table = db->find_table(table_name);
   if (nullptr == table) {
     LOG_WARN("no such table. db=%s, table_name=%s", db->name(), table_name);
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
 
+  // 第 2 步：为 where 条件准备可见表映射；DELETE 当前只作用于单表。
   unordered_map<string, Table *> table_map;
   table_map.insert(pair<string, Table *>(string(table_name), table));
 
   FilterStmt *filter_stmt = nullptr;
+  // 第 3 步：把 parse 阶段的比较条件绑定成可执行的过滤单元。
   RC          rc          = FilterStmt::create(
       db, table, &table_map, delete_sql.conditions.data(), static_cast<int>(delete_sql.conditions.size()), filter_stmt);
   if (rc != RC::SUCCESS) {
@@ -54,6 +63,7 @@ RC DeleteStmt::create(Db *db, const DeleteSqlNode &delete_sql, Stmt *&stmt)
     return rc;
   }
 
+  // 第 4 步：构造最终 stmt，执行阶段直接消费 table/filter 即可。
   stmt = new DeleteStmt(table, filter_stmt);
   return rc;
 }

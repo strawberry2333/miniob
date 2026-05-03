@@ -10,6 +10,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/optimizer/optimizer_utils.h"
 
+/**
+ * @file optimizer_utils.cpp
+ * @brief 物理计划可视化辅助实现。
+ */
+
 string OptimizerUtils::dump_physical_plan(const unique_ptr<PhysicalOperator>& children)
 {
   std::function<void(ostream &, PhysicalOperator *, int, bool, vector<uint8_t> &)> to_string = [&](
@@ -43,8 +48,9 @@ string OptimizerUtils::dump_physical_plan(const unique_ptr<PhysicalOperator>& ch
     }
     ends[level + 1] = 0;
 
+    // 递归打印孩子节点时，`ends` 记录各层是否已经走到了最后一个分支。
     vector<unique_ptr<PhysicalOperator>> &children = oper->children();
-    const auto                                 size     = static_cast<int>(children.size());
+    const auto                           size     = static_cast<int>(children.size());
     for (auto i = 0; i < size - 1; i++) {
       to_string(os, children[i].get(), level + 1, false /*last_child*/, ends);
     }

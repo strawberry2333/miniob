@@ -37,8 +37,14 @@ class Trx;
 class Db;
 
 /**
- * @brief 表
- *
+ * @file table.h
+ * @brief 定义逻辑表对象以及其与 `TableEngine` 的协作边界。
+ */
+
+/**
+ * @brief 逻辑表对象。
+ * @details `Table` 负责维护表元数据、LOB 文件以及统一对外接口；
+ * 真实的数据读写、索引维护和扫描能力下沉到具体 `TableEngine` 实现中。
  */
 class Table
 {
@@ -85,19 +91,27 @@ public:
    */
   RC insert_record(Record &record);
 
+  /// @brief 批量插入一批列式数据。
   RC insert_chunk(const Chunk &chunk);
+  /// @brief 删除一条已定位的记录。
   RC delete_record(const Record &record);
 
+  /// @brief 在事务上下文中插入记录。
   RC insert_record_with_trx(Record &record, Trx *trx);
+  /// @brief 在事务上下文中删除记录。
   RC delete_record_with_trx(const Record &record, Trx *trx);
+  /// @brief 在事务上下文中更新记录。
   RC update_record_with_trx(const Record &old_record, const Record &new_record, Trx *trx);
+  /// @brief 按 RID 取回一条记录。
   RC get_record(const RID &rid, Record &record);
 
   // TODO refactor
   RC create_index(Trx *trx, const FieldMeta *field_meta, const char *index_name);
 
+  /// @brief 构建记录扫描器，生命周期由调用方管理。
   RC get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWriteMode mode);
 
+  /// @brief 构建批量 `Chunk` 扫描器。
   RC get_chunk_scanner(ChunkFileScanner &scanner, Trx *trx, ReadWriteMode mode);
 
   /**
@@ -119,9 +133,11 @@ public:
 
   LobFileHandler *lob_handler() const { return lob_handler_; }
 
+  /// @brief 刷新表元数据、数据页和索引页。
   RC sync();
 
 private:
+  /// @brief 将单个逻辑值写入记录缓冲区指定字段位置。
   RC set_value_to_record(char *record_data, const Value &value, const FieldMeta *field);
 
 private:

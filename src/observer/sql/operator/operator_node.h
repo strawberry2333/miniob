@@ -15,6 +15,13 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/memory.h"
 #include "sql/optimizer/cascade/property.h"
 #include "sql/optimizer/cascade/cost_model.h"
+
+/**
+ * @file operator_node.h
+ * @brief 逻辑/物理算子的统一基类视图。
+ * @details 级联优化器需要在同一个 memo 结构里同时保存逻辑节点与物理节点，
+ * 因此这里抽出一层与执行器无关的公共接口。
+ */
 /**
  * @brief Operator type(including logical and physical)
  */
@@ -135,6 +142,7 @@ public:
 
   void add_general_child(OperatorNode *child) { general_children_.push_back(child); }
 
+  /// @brief 返回供级联优化器遍历的统一子节点数组。
   vector<OperatorNode *> &get_general_children() { return general_children_; }
 
 protected:

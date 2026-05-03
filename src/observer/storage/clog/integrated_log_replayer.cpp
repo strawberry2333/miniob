@@ -15,6 +15,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/clog/integrated_log_replayer.h"
 #include "storage/clog/log_entry.h"
 
+/**
+ * @file integrated_log_replayer.cpp
+ * @brief 多模块日志分发回放器实现。
+ */
+
 IntegratedLogReplayer::IntegratedLogReplayer(BufferPoolManager &bpm)
     : buffer_pool_log_replayer_(bpm),
       record_log_replayer_(bpm),
@@ -31,6 +36,7 @@ IntegratedLogReplayer::IntegratedLogReplayer(BufferPoolManager &bpm, unique_ptr<
 
 RC IntegratedLogReplayer::replay(const LogEntry &entry)
 {
+  // 统一按模块号分发，保证各子系统沿用自己的幂等恢复逻辑。
   switch (entry.module().id()) {
     case LogModule::Id::BUFFER_POOL: return buffer_pool_log_replayer_.replay(entry);
     case LogModule::Id::RECORD_MANAGER: return record_log_replayer_.replay(entry);
@@ -42,6 +48,7 @@ RC IntegratedLogReplayer::replay(const LogEntry &entry)
 
 RC IntegratedLogReplayer::on_done()
 {
+  // 按依赖顺序执行收尾：先物理页，再记录/索引，最后事务层处理未完成状态。
   RC rc = buffer_pool_log_replayer_.on_done();
   if (OB_FAIL(rc)) {
     LOG_WARN("failed to do buffer pool log replay. rc=%s", strrc(rc));

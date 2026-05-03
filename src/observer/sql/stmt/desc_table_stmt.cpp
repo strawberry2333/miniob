@@ -15,8 +15,14 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/desc_table_stmt.h"
 #include "storage/db/db.h"
 
+/**
+ * @file desc_table_stmt.cpp
+ * @brief 实现 `DESC` 语句的语义绑定。
+ */
+
 RC DescTableStmt::create(Db *db, const DescTableSqlNode &desc_table, Stmt *&stmt)
 {
+  // 提前检查表是否存在，执行阶段可以直接进入结果集构造。
   if (db->find_table(desc_table.relation_name.c_str()) == nullptr) {
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }

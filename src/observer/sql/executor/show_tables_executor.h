@@ -23,7 +23,12 @@ See the Mulan PSL v2 for more details. */
 #include "storage/db/db.h"
 
 /**
- * @brief 显示所有表的执行器
+ * @file show_tables_executor.h
+ * @brief 定义 `SHOW TABLES` 命令执行器。
+ */
+
+/**
+ * @brief 枚举当前数据库中所有表名的命令执行器。
  * @ingroup Executor
  * @note 与CreateIndex类似，不处理并发
  */
@@ -33,11 +38,17 @@ public:
   ShowTablesExecutor()          = default;
   virtual ~ShowTablesExecutor() = default;
 
+  /**
+   * @brief 执行 `SHOW TABLES`。
+   * @param sql_event 当前 SQL 请求上下文。
+   * @return 总是返回 `RC::SUCCESS`。
+   */
   RC execute(SQLStageEvent *sql_event)
   {
     SqlResult    *sql_result    = sql_event->session_event()->sql_result();
     SessionEvent *session_event = sql_event->session_event();
 
+    // 直接从当前数据库拉取表名列表，再包装成单列表结果集。
     Db *db = session_event->session()->get_current_db();
 
     vector<string> all_tables;
@@ -48,6 +59,7 @@ public:
     sql_result->set_tuple_schema(tuple_schema);
 
     auto oper = new StringListPhysicalOperator;
+    // 每个表名输出成结果集中的一行。
     for (const string &s : all_tables) {
       oper->append(s);
     }

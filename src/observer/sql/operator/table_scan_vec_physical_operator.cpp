@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file table_scan_vec_physical_operator.cpp
+ * @brief 向量化全表扫描的实现。
+ */
+
 RC TableScanVecPhysicalOperator::open(Trx *trx)
 {
   RC rc = table_->get_chunk_scanner(chunk_scanner_, trx, mode_);
@@ -53,6 +58,7 @@ RC TableScanVecPhysicalOperator::next(Chunk &chunk)
           continue;
         }
         for (int j = 0; j < all_columns_.column_num(); j++) {
+          // 当前实现采用逐行回填过滤结果，逻辑简单但会牺牲部分向量化收益。
           filterd_columns_.column(j).append_value(
               all_columns_.column(filterd_columns_.column_ids(j)).get_value(i));
         }
@@ -76,6 +82,7 @@ RC TableScanVecPhysicalOperator::filter(Chunk &chunk)
 {
   RC rc = RC::SUCCESS;
   for (unique_ptr<Expression> &expr : predicates_) {
+    // 每个比较表达式都在已有选择向量上继续做按位与，逐步收紧候选行。
     rc = expr->eval(chunk, select_);
     if (rc != RC::SUCCESS) {
       return rc;

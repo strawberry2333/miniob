@@ -27,6 +27,11 @@ using common::MiniobLineReader;
 
 const std::string LINE_HISTORY_FILE = "./.miniob.history";
 
+/**
+ * @file cli_communicator.cpp
+ * @brief CLI 模式下的交互式通讯实现。
+ */
+
 RC CliCommunicator::init(int fd, unique_ptr<Session> session, const string &addr)
 {
   RC rc = PlainCommunicator::init(fd, std::move(session), addr);
@@ -38,14 +43,14 @@ RC CliCommunicator::init(int fd, unique_ptr<Session> session, const string &addr
   if (fd == STDIN_FILENO) {
     write_fd_ = STDOUT_FILENO;
     delete writer_;
-    writer_ = new BufferedWriter(write_fd_);
+    writer_ = new BufferedWriter(write_fd_);  // 文本输出应走标准输出，而不是标准输入 fd。
 
     MiniobLineReader::instance().init(LINE_HISTORY_FILE);
 
     const char delimiter = '\n';
-    send_message_delimiter_.assign(1, delimiter);
+    send_message_delimiter_.assign(1, delimiter);  // CLI 响应以换行结束，更符合终端体验。
 
-    fd_ = -1;  // 防止被父类析构函数关闭
+    fd_ = -1;  // 防止基类析构时错误关闭标准输入。
   } else {
     rc = RC::INVALID_ARGUMENT;
     LOG_WARN("only stdin supported");
@@ -57,7 +62,7 @@ RC CliCommunicator::read_event(SessionEvent *&event)
 {
   event                  = nullptr;
   const char *prompt_str = "miniob > ";
-  std::string command    = MiniobLineReader::instance().my_readline(prompt_str);
+  std::string command    = MiniobLineReader::instance().my_readline(prompt_str);  // 内部负责历史记录与编辑。
   if (command.empty()) {
     return RC::SUCCESS;
   }
@@ -67,6 +72,7 @@ RC CliCommunicator::read_event(SessionEvent *&event)
   }
 
   if (MiniobLineReader::instance().is_exit_command(command)) {
+    // 退出命令由外层 CLI server 感知并结束主循环，不再生成 SQL 事件。
     exit_ = true;
     return RC::SUCCESS;
   }
@@ -80,6 +86,7 @@ RC CliCommunicator::write_result(SessionEvent *event, bool &need_disconnect)
 {
   RC rc = PlainCommunicator::write_result(event, need_disconnect);
 
+  // CLI 模式的“连接”就是当前进程的 stdio，不应因为单次写失败就让上层走断连路径。
   need_disconnect = false;
   return rc;
 }

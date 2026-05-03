@@ -27,6 +27,11 @@ class LogicalOperator;
 class Stmt;
 
 /**
+ * @file optimize_stage.h
+ * @brief SQL 优化阶段入口。
+ */
+
+/**
  * @brief 将解析后的Statement转换成执行计划，并进行优化
  * @ingroup SQLStage
  * @details 优化分为两种，一个是根据规则重写，一个是根据代价模型优化。

@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/composite_tuple.h"
 
 /**
+ * @file group_by_physical_operator.h
+ * @brief 行式 group by 算子的公共基类。
+ */
+
+/**
  * @brief Group By 物理算子基类
  * @ingroup PhysicalOperator
  */
@@ -42,6 +47,7 @@ protected:
   using GroupValueType = tuple<AggregatorList, CompositeTuple>;
 
 protected:
+  /// @brief 根据聚合表达式列表创建一组聚合器实例。
   void create_aggregator_list(AggregatorList &aggregator_list);
 
   /// @brief 聚合一条记录
@@ -49,6 +55,7 @@ protected:
   /// @param tuple 执行聚合运算的一条记录
   RC aggregate(AggregatorList &aggregator_list, const Tuple &tuple);
 
+  /// @brief 所有输入处理完成后，把聚合器状态写回最终输出 tuple。
   /// @brief 所有tuple聚合结束后，运算最终结果
   RC evaluate(GroupValueType &group_value);
 

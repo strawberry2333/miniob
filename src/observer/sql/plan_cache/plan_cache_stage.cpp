@@ -22,3 +22,10 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 
 using namespace common;
+
+/**
+ * @file plan_cache_stage.cpp
+ * @brief 计划缓存阶段的占位实现。
+ * @details 当前没有可执行逻辑；保留该文件主要是为了明确 pipeline 中
+ * “逻辑计划/物理计划缓存”这一扩展点应该落在什么位置。
+ */

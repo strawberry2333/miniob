@@ -17,8 +17,13 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/logical_operator.h"
 
 /**
- * @brief 逻辑算子描述当前执行计划要做什么
- * @details 可以看OptimizeStage中相关的代码
+ * @file calc_logical_operator.h
+ * @brief `SELECT 1 + 2` 这类无表表达式查询的逻辑算子。
+ */
+
+/**
+ * @brief 纯表达式计算逻辑算子。
+ * @details 该算子不依赖输入表，执行时会把 `expressions_` 直接包装成一行输出。
  */
 class CalcLogicalOperator : public LogicalOperator
 {

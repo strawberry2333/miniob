@@ -16,6 +16,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/index/index.h"
 #include "storage/trx/trx.h"
 
+/**
+ * @file index_scan_physical_operator.cpp
+ * @brief 索引扫描与回表逻辑。
+ */
+
 IndexScanPhysicalOperator::IndexScanPhysicalOperator(Table *table, Index *index, ReadWriteMode mode, const Value *left_value,
     bool left_inclusive, const Value *right_value, bool right_inclusive)
     : table_(table),
@@ -84,6 +89,7 @@ RC IndexScanPhysicalOperator::next()
       continue;
     }
 
+    // 通过事务层再次确认记录对当前语句可见，避免读到不可见版本。
     rc = trx_->visit_record(table_, current_record_, mode_);
     if (rc == RC::RECORD_INVISIBLE) {
       LOG_TRACE("record invisible");

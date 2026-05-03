@@ -11,6 +11,11 @@ See the Mulan PSL v2 for more details. */
 #pragma once
 
 /**
+ * @brief 逻辑属性类型定义。
+ * @details AttrType 是类型系统的根枚举，parser、schema、Value 和 DataType 都依赖它分派逻辑。
+ */
+
+/**
  * @brief 属性的类型
  * @details AttrType 枚举列出了属性的各种数据类型。
  */
@@ -25,7 +30,11 @@ enum class AttrType
   MAXTYPE,   ///< 请在 UNDEFINED 与 MAXTYPE 之间增加新类型
 };
 
+/// @brief 把 AttrType 转成对外可读的字符串名字。
 const char *attr_type_to_string(AttrType type);
+/// @brief 根据字符串解析 AttrType；无法识别时返回 UNDEFINED。
 AttrType    attr_type_from_string(const char *s);
+/// @brief 判断某个 AttrType 是否属于数值类型。
 bool        is_numerical_type(AttrType type);
+/// @brief 判断某个 AttrType 是否属于字符串类型。
 bool        is_string_type(AttrType type);

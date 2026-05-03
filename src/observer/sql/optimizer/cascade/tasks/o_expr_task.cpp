@@ -16,6 +16,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 #include <algorithm>
 
+/**
+ * @file o_expr_task.cpp
+ * @brief 表达式级优化任务实现。
+ */
+
 void OptimizeExpression::perform()
 {
   std::vector<RuleWithPromise> valid_rules;
@@ -51,6 +56,7 @@ void OptimizeExpression::perform()
     int child_group_idx = 0;
     for (auto &child_pattern : r.get_rule()->get_match_pattern()->children()) {
       if (child_pattern->get_child_patterns_size() > 0) {
+        // 只有规则模式继续向下展开时，才需要确保对应子 group 已被探索。
         Group *group = get_memo().get_group_by_id(group_expr_->get_child_group_ids()[child_group_idx]);
         push_task(new ExploreGroup(group, context_));
       }

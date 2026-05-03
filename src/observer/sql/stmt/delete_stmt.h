@@ -21,24 +21,39 @@ class Table;
 class FilterStmt;
 
 /**
- * @brief Delete 语句
+ * @file delete_stmt.h
+ * @brief 定义 `DELETE` 的语义对象。
+ */
+
+/**
+ * @brief 表示 `DELETE FROM ... WHERE ...` 语句。
  * @ingroup Statement
  */
 class DeleteStmt : public Stmt
 {
 public:
+  /**
+   * @brief 构造删除语句。
+   * @param table 目标表。
+   * @param filter_stmt 绑定后的过滤条件，可为空。
+   */
   DeleteStmt(Table *table, FilterStmt *filter_stmt);
   ~DeleteStmt() override;
 
+  /// 返回目标表。
   Table      *table() const { return table_; }
+  /// 返回过滤条件。
   FilterStmt *filter_stmt() const { return filter_stmt_; }
 
   StmtType type() const override { return StmtType::DELETE; }
 
 public:
+  /**
+   * @brief 从 parse 节点构造删除语句，并绑定 where 条件。
+   */
   static RC create(Db *db, const DeleteSqlNode &delete_sql, Stmt *&stmt);
 
 private:
-  Table      *table_       = nullptr;
-  FilterStmt *filter_stmt_ = nullptr;
+  Table      *table_       = nullptr;  ///< 删除目标表
+  FilterStmt *filter_stmt_ = nullptr;  ///< WHERE 子句绑定结果
 };

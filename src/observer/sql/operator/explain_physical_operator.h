@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/physical_operator.h"
 
 /**
+ * @file explain_physical_operator.h
+ * @brief `EXPLAIN` 结果集算子。
+ */
+
+/**
  * @brief Explain物理算子
  * @ingroup PhysicalOperator
  */
@@ -48,6 +53,7 @@ public:
   }
 
 private:
+  /// @brief 递归生成物理计划的文本树。
   void generate_physical_plan();
 
 private:

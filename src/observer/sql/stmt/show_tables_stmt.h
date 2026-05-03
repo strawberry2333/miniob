@@ -22,9 +22,14 @@ See the Mulan PSL v2 for more details. */
 class Db;
 
 /**
- * @brief 描述表的语句
+ * @file show_tables_stmt.h
+ * @brief 定义 `SHOW TABLES` 的语义对象。
+ */
+
+/**
+ * @brief 表示显示当前数据库所有表的语句。
  * @ingroup Statement
- * @details 虽然解析成了stmt，但是与原始的SQL解析后的数据也差不多
+ * @details 当前语句本身无额外载荷，执行时直接从当前 DB 枚举表列表。
  */
 class ShowTablesStmt : public Stmt
 {
@@ -34,6 +39,9 @@ public:
 
   StmtType type() const override { return StmtType::SHOW_TABLES; }
 
+  /**
+   * @brief 创建一个无状态的 `ShowTablesStmt`。
+   */
   static RC create(Db *db, Stmt *&stmt)
   {
     stmt = new ShowTablesStmt();

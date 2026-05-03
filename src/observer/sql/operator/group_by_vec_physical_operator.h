@@ -14,12 +14,19 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/physical_operator.h"
 
 /**
+ * @file group_by_vec_physical_operator.h
+ * @brief 向量化分组聚合算子占位声明。
+ * @details 当前接口已经接入计划生成器，但实现仍返回 `RC::UNIMPLEMENTED`。
+ */
+
+/**
  * @brief Group By 物理算子(vectorized)
  * @ingroup PhysicalOperator
  */
 class GroupByVecPhysicalOperator : public PhysicalOperator
 {
 public:
+  /// @brief 预留接管分组列表达式与聚合表达式的构造入口。
   GroupByVecPhysicalOperator(vector<unique_ptr<Expression>> &&group_by_exprs, vector<Expression *> &&expressions){};
 
   virtual ~GroupByVecPhysicalOperator() = default;

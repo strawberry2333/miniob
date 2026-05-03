@@ -28,6 +28,11 @@ See the Mulan PSL v2 for more details. */
 class LogReplayer;
 
 /**
+ * @file disk_log_handler.h
+ * @brief 定义带后台刷盘线程的磁盘日志处理器。
+ */
+
+/**
  * @brief 对外提供服务的CLog模块
  * @ingroup CLog
  * @details 该模块负责日志的写入、读取、回放等功能。
@@ -115,6 +120,7 @@ private:
 private:
   /**
    * @brief 刷新日志的线程函数
+   * @details 持续从 `entry_buffer_` 取日志写入文件，直到 `stop` 且缓冲区排空。
    */
   void thread_func();
 

@@ -10,7 +10,10 @@ See the Mulan PSL v2 for more details. */
 
 #include "storage/record/heap_record_scanner.h"
 
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file heap_record_scanner.cpp
+ * @brief 页式记录扫描器实现。
+ */
 
 
 RC HeapRecordScanner::open_scan()
@@ -24,6 +27,7 @@ RC HeapRecordScanner::open_scan()
     return rc;
   }
   if (table_ == nullptr || table_->table_meta().storage_format() == StorageFormat::ROW_FORMAT) {
+    // 扫描器根据表存储格式选择页处理器，实现行存与 PAX 的统一遍历入口。
     record_page_handler_ = new RowRecordPageHandler();
   } else {
     record_page_handler_ = new PaxRecordPageHandler();
@@ -56,6 +60,7 @@ RC HeapRecordScanner::fetch_next_record()
   while (bp_iterator_.has_next()) {
     PageNum page_num = bp_iterator_.next();
     record_page_handler_->cleanup();
+    // 页面切换时重绑页处理器，并重新初始化页内迭代器。
     rc = record_page_handler_->init(*disk_buffer_pool_, *log_handler_, page_num, rw_mode_);
     if (OB_FAIL(rc)) {
       LOG_WARN("failed to init record page handler. page_num=%d, rc=%s", page_num, strrc(rc));
@@ -92,7 +97,7 @@ RC HeapRecordScanner::fetch_next_record_in_page()
       return rc;
     }
 
-    // 如果有过滤条件，就用过滤条件过滤一下
+    // 先做谓词过滤，尽量减少后续事务可见性探测的开销。
     if (condition_filter_ != nullptr && !condition_filter_->filter(next_record_)) {
       continue;
     }
@@ -102,8 +107,7 @@ RC HeapRecordScanner::fetch_next_record_in_page()
       return rc;
     }
 
-    // 让当前事务探测一下是否访问冲突，或者需要加锁、等锁等操作，由事务自己决定
-    // TODO 把判断事务有效性的逻辑从Scanner中移除
+    // 事务层负责决定是否可见、是否需要报并发冲突；扫描器只负责顺序推进。
     rc = trx_->visit_record(table_, next_record_, rw_mode_);
     if (rc == RC::RECORD_INVISIBLE) {
       // 可以参考MvccTrx，表示当前记录不可见

@@ -30,6 +30,11 @@ class BufferPoolManager;
 class DiskBufferPool;
 
 /**
+ * @file record_log.h
+ * @brief 定义记录页相关的 redo 日志格式与回放逻辑。
+ */
+
+/**
  * @brief 记录管理器操作相关的日志类型
  * @ingroup CLog
  */
@@ -84,6 +89,7 @@ public:
   RecordLogHandler()  = default;
   ~RecordLogHandler() = default;
 
+  /// @brief 绑定日志处理器和固定记录布局参数。
   RC init(LogHandler &log_handler, int32_t buffer_pool_id, int32_t record_size, StorageFormat storage_format);
 
   /**
@@ -145,9 +151,13 @@ public:
   virtual RC replay(const LogEntry &entry) override;
 
 private:
+  /// @brief 重放空页初始化日志。
   RC replay_init_page(DiskBufferPool &buffer_pool, const RecordLogHeader &log_header);
+  /// @brief 重放插入日志。
   RC replay_insert(DiskBufferPool &buffer_pool, const RecordLogHeader &log_header);
+  /// @brief 重放删除日志。
   RC replay_delete(DiskBufferPool &buffer_pool, const RecordLogHeader &log_header);
+  /// @brief 重放更新日志。
   RC replay_update(DiskBufferPool &buffer_pool, const RecordLogHeader &log_header);
 
 private:

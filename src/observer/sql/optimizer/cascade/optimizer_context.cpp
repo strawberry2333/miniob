@@ -12,6 +12,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/memo.h"
 #include "sql/optimizer/cascade/rules.h"
 
+/**
+ * @file optimizer_context.cpp
+ * @brief 级联优化器上下文与 memo 录入逻辑。
+ */
+
 OptimizerContext::OptimizerContext()
       : memo_(new Memo()), rule_set_(new RuleSet()), cost_model_(), task_pool_(nullptr),
         cost_upper_bound_(std::numeric_limits<double>::max()) {}
@@ -44,6 +49,7 @@ GroupExpr *OptimizerContext::make_group_expression(OperatorNode* node)
       child_groups.push_back(gexpr->get_group_id());
       delete gexpr;
     } else {
+      // memo 去重后，父表达式只需要记住孩子所在的 group id。
       child_groups.push_back(mexpr->get_group_id());
     }
   }

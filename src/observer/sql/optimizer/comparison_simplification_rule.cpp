@@ -16,6 +16,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 #include "sql/expr/expression.h"
 
+/**
+ * @file comparison_simplification_rule.cpp
+ * @brief 比较表达式常量折叠实现。
+ */
+
 RC ComparisonSimplificationRule::rewrite(unique_ptr<Expression> &expr, bool &change_made)
 {
   RC rc = RC::SUCCESS;
@@ -28,6 +33,7 @@ RC ComparisonSimplificationRule::rewrite(unique_ptr<Expression> &expr, bool &cha
 
     RC sub_rc = cmp_expr->try_get_value(value);
     if (sub_rc == RC::SUCCESS) {
+      // 左右两侧都可提前求值时，直接把整棵比较子树替换成布尔常量。
       unique_ptr<Expression> new_expr(new ValueExpr(value));
       expr.swap(new_expr);
       change_made = true;

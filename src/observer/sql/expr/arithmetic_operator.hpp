@@ -16,6 +16,13 @@ See the Mulan PSL v2 for more details. */
 
 #include "storage/common/column.h"
 
+/**
+ * @file arithmetic_operator.hpp
+ * @brief 向量化比较与算术模板算子。
+ * @details `ComparisonExpr` 和 `ArithmeticExpr` 会通过本文件的模板函数把
+ * `Column` 数据批量映射到底层标量/SIMD 运算。
+ */
+
 struct Equal
 {
   template <class T>
@@ -149,7 +156,7 @@ struct SubtractOperator
   {
     return left - right;
   }
-  // your code here
+  // TODO: SIMD 版本尚未补齐，因此当前浮点/整数批量减法只能退回标量模板实现。
 #if defined(USE_SIMD)
   static inline __m256 operation(__m256 left, __m256 right) { exit(-1); }
 
@@ -164,7 +171,7 @@ struct MultiplyOperator
   {
     return left * right;
   }
-// your code here
+  // TODO: SIMD 版本尚未补齐，因此当前浮点/整数批量乘法只能退回标量模板实现。
 #if defined(USE_SIMD)
   static inline __m256 operation(__m256 left, __m256 right) { exit(-1); }
 
@@ -229,6 +236,7 @@ void compare_operation(T *left, T *right, int n, vector<uint8_t> &result)
       __m256i mask          = _mm256_castps_si256(result_values);
 
       for (int j = 0; j < SIMD_WIDTH; j++) {
+        // 选择向量按位与累积，允许多个谓词连续收窄候选行集。
         result[i + j] &= mm256_extract_epi32_var_indx(mask, j) ? 1 : 0;
       }
     }

@@ -14,12 +14,18 @@ See the Mulan PSL v2 for more details. */
 
 #include "storage/common/arena_allocator.h"
 
+/**
+ * @file arena_allocator.cpp
+ * @brief `Arena` 的块分配实现。
+ */
+
 static const int kBlockSize = 4096;
 
 Arena::Arena()
     : alloc_ptr_(nullptr), alloc_bytes_remaining_(0), memory_usage_(0) {}
 
 Arena::~Arena() {
+  // Arena 只支持整体释放，因此析构时统一回收所有底层块。
   for (size_t i = 0; i < blocks_.size(); i++) {
     delete[] blocks_[i];
   }
@@ -27,13 +33,12 @@ Arena::~Arena() {
 
 char* Arena::AllocateFallback(size_t bytes) {
   if (bytes > kBlockSize / 4) {
-    // Object is more than a quarter of our block size.  Allocate it separately
-    // to avoid wasting too much space in leftover bytes.
+    // 超过标准块 1/4 的大对象单独成块，避免把常规块剩余空间切得过碎。
     char* result = AllocateNewBlock(bytes);
     return result;
   }
 
-  // We waste the remaining space in the current block.
+  // 小对象则切换到新的标准块；旧块剩余碎片直接放弃，换取更快的线性分配路径。
   alloc_ptr_ = AllocateNewBlock(kBlockSize);
   alloc_bytes_remaining_ = kBlockSize;
 
@@ -52,11 +57,12 @@ char* Arena::AllocateAligned(size_t bytes) {
   size_t needed = bytes + slop;
   char* result;
   if (needed <= alloc_bytes_remaining_) {
+    // 当前块仍可容纳“对齐填充 + 实际数据”，直接在块内顺序切分。
     result = alloc_ptr_ + slop;
     alloc_ptr_ += needed;
     alloc_bytes_remaining_ -= needed;
   } else {
-    // AllocateFallback always returned aligned memory
+    // Fallback 会返回按 `new[]` 默认对齐的块，足以满足这里的对齐要求。
     result = AllocateFallback(bytes);
   }
   assert((reinterpret_cast<uintptr_t>(result) & (align - 1)) == 0);
@@ -66,6 +72,7 @@ char* Arena::AllocateAligned(size_t bytes) {
 char* Arena::AllocateNewBlock(size_t block_bytes) {
   char* result = new char[block_bytes];
   blocks_.push_back(result);
+  // 统计值只用于观测，使用 relaxed 即可避免给分配路径增加额外同步成本。
   memory_usage_.fetch_add(block_bytes + sizeof(char*),
                           std::memory_order_relaxed);
   return result;

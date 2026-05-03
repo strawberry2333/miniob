@@ -16,17 +16,24 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 #include "sql/stmt/stmt.h"
 
+/**
+ * @file explain_stmt.cpp
+ * @brief 实现 `EXPLAIN` 对内部语句的包装。
+ */
+
 ExplainStmt::ExplainStmt(unique_ptr<Stmt> child_stmt) : child_stmt_(std::move(child_stmt)) {}
 
 RC ExplainStmt::create(Db *db, const ExplainSqlNode &explain, Stmt *&stmt)
 {
   Stmt *child_stmt = nullptr;
+  // EXPLAIN 本身不创造新的业务语义，而是先把内部命令照常 resolve 成 stmt。
   RC    rc         = Stmt::create_stmt(db, *explain.sql_node, child_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("failed to create explain's child stmt. rc=%s", strrc(rc));
     return rc;
   }
 
+  // 再把内部 stmt 包一层，后续 explain executor/optimizer 可读取其中的计划信息。
   unique_ptr<Stmt> child_stmt_ptr = unique_ptr<Stmt>(child_stmt);
   stmt                                 = new ExplainStmt(std::move(child_stmt_ptr));
   return rc;

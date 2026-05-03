@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/physical_operator.h"
 
+/**
+ * @file physical_operator.cpp
+ * @brief 物理算子基类的通用工具实现。
+ */
+
 string physical_operator_type_name(PhysicalOperatorType type)
 {
   switch (type) {
@@ -40,4 +45,5 @@ string physical_operator_type_name(PhysicalOperatorType type)
 
 string PhysicalOperator::name() const { return physical_operator_type_name(type()); }
 
+// 默认参数字符串为空，具体算子按需重载以在 `EXPLAIN` 中补充额外上下文。
 string PhysicalOperator::param() const { return ""; }

@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/clog/log_handler.h"
 
 /**
+ * @file vacuous_log_handler.h
+ * @brief 定义不做任何持久化动作的空日志处理器。
+ */
+
+/**
  * @brief VacuousLogHandler is a log handler implenmentation that do nothing in all methods.
  * It is used for testing.
  * @ingroup CLog

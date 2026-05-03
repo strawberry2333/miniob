@@ -15,6 +15,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/index/bplus_tree_log_entry.h"
 #include "common/lang/serializer.h"
 
+/**
+ * @file bplus_tree_log_entry.cpp
+ * @brief B+ 树细粒度日志条目的编解码与执行实现。
+ */
+
 using namespace common;
 
 namespace bplus_tree {

@@ -30,6 +30,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file db.cpp
+ * @brief 数据库对象的目录装载、恢复和同步实现。
+ */
+
 Db::~Db()
 {
   for (auto &iter : opened_tables_) {
@@ -37,7 +42,7 @@ Db::~Db()
   }
 
   if (log_handler_) {
-    // 停止日志并等待写入完成
+    // 关闭数据库前必须先把后台刷日志线程停干净，避免表和缓冲池析构后仍有异步刷盘访问。
     log_handler_->stop();
     log_handler_->await_termination();
     log_handler_.reset();
@@ -63,6 +68,7 @@ RC Db::init(const char *name, const char *dbpath, const char *trx_kit_name, cons
     return RC::INVALID_ARGUMENT;
   }
 
+  // 先启动底层 LSM 子系统，再装配事务、buffer pool 和 WAL，确保各子组件能互相引用。
   oceanbase::ObLsmOptions options;
   filesystem::path lsm_path = filesystem::path(dbpath) / "lsm";
   filesystem::create_directory(lsm_path);
@@ -119,15 +125,14 @@ RC Db::init(const char *name, const char *dbpath, const char *trx_kit_name, cons
   name_ = name;
   path_ = dbpath;
 
-  // 加载数据库本身的元数据
+  // 先恢复数据库级元信息，再打开表文件；这样表创建流程能拿到正确的下一张表 ID。
   rc = init_meta();
   if (OB_FAIL(rc)) {
     LOG_WARN("failed to init meta. dbpath=%s, rc=%s", dbpath, strrc(rc));
     return rc;
   }
 
-  // 打开所有表
-  // 在实际生产数据库中，直接打开所有表，可能耗时会比较长
+  // 逐表打开会带来启动时间开销，但能在恢复前把所有对象都纳入目录级管理。
   rc = open_all_tables();
   if (OB_FAIL(rc)) {
     LOG_WARN("failed to open all tables. dbpath=%s, rc=%s", dbpath, strrc(rc));
@@ -140,7 +145,7 @@ RC Db::init(const char *name, const char *dbpath, const char *trx_kit_name, cons
     return rc;
   }
 
-  // 尝试恢复数据库，重做redo日志
+  // 所有物理对象就绪后再做恢复，避免重做过程访问到尚未打开的表或 buffer pool。
   rc = recover();
   if (OB_FAIL(rc)) {
     LOG_WARN("failed to recover db. dbpath=%s, rc=%s", dbpath, strrc(rc));
@@ -159,7 +164,7 @@ RC Db::create_table(const char *table_name, span<const AttrInfoSqlNode> attribut
     return RC::SCHEMA_TABLE_EXIST;
   }
 
-  // 文件路径可以移到Table模块
+  // 这里先分配 table_id 并落到表元数据中，后续日志和索引恢复都依赖这个稳定标识。
   string  table_file_path = table_meta_file(path_.c_str(), table_name);
   Table  *table           = new Table();
   int32_t table_id        = next_table_id_++;
@@ -208,6 +213,7 @@ RC Db::open_all_tables()
   RC rc = RC::SUCCESS;
   for (const string &filename : table_meta_files) {
     Table *table = new Table();
+    // 每个表自己负责打开元数据、数据文件、LOB 文件以及对应引擎。
     rc           = table->open(this, filename.c_str(), path_.c_str());
     if (rc != RC::SUCCESS) {
       delete table;
@@ -246,7 +252,7 @@ void Db::all_tables(vector<string> &table_names) const
 RC Db::sync()
 {
   RC rc = RC::SUCCESS;
-  // 调用所有表的sync函数刷新数据到磁盘
+  // 表级 sync 会先刷记录页和索引页；数据库级别随后再处理 double write buffer 和自身元数据。
   for (const auto &table_pair : opened_tables_) {
     Table *table = table_pair.second;
     rc           = table->sync();

@@ -40,6 +40,11 @@ See the Mulan PSL v2 for more details. */
 using namespace std;
 using namespace common;
 
+/**
+ * @file logical_plan_generator.cpp
+ * @brief 逻辑计划生成器实现。
+ */
+
 RC LogicalPlanGenerator::create(Stmt *stmt, unique_ptr<LogicalOperator> &logical_operator)
 {
   RC rc = RC::SUCCESS;
@@ -102,11 +107,11 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
 
   const vector<Table *> &tables = select_stmt->tables();
   for (Table *table : tables) {
-
     unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, ReadWriteMode::READ_ONLY));
     if (table_oper == nullptr) {
       table_oper = std::move(table_get_oper);
     } else {
+      // 多表查询先拼成左深 join 树，后续谓词改写再决定是否能下推或转为连接条件。
       JoinLogicalOperator *join_oper = new JoinLogicalOperator;
       join_oper->add_child(std::move(table_oper));
       join_oper->add_child(std::move(table_get_oper));
@@ -200,6 +205,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
 
       } else {
         rc = RC::UNSUPPORTED;
+        // 两侧都无法隐式对齐时，计划生成直接失败，避免执行阶段再暴露类型错误。
         LOG_WARN("unsupported cast from %s to %s", attr_type_to_string(left->value_type()), attr_type_to_string(right->value_type()));
         return rc;
       }
@@ -288,6 +294,7 @@ RC LogicalPlanGenerator::create_group_by_plan(SelectStmt *select_stmt, unique_pt
   function<RC(unique_ptr<Expression>&)> collector = [&](unique_ptr<Expression> &expr) -> RC {
     RC rc = RC::SUCCESS;
     if (expr->type() == ExprType::AGGREGATION) {
+      // 聚合表达式在 group by 输出 chunk 中排在所有分组列之后。
       expr->set_pos(aggregate_expressions.size() + group_by_expressions.size());
       aggregate_expressions.push_back(expr.get());
     }
@@ -302,6 +309,7 @@ RC LogicalPlanGenerator::create_group_by_plan(SelectStmt *select_stmt, unique_pt
       if (expr->type() == ExprType::AGGREGATION) {
         break;
       } else if (expr->equal(*group_by)) {
+        // 能与显式 `GROUP BY` 列匹配的表达式会记录自己的输出位置，后续直接引用。
         expr->set_pos(i);
         continue;
       } else {
@@ -319,6 +327,7 @@ RC LogicalPlanGenerator::create_group_by_plan(SelectStmt *select_stmt, unique_pt
     } else if (expr->pos() != -1) {
       // do nothing
     } else if (expr->type() == ExprType::FIELD) {
+      // 出现在 select 列表中、但既不在 group by 中也不在聚合里的字段会触发语义错误。
       found_unbound_column = true;
     }else {
       rc = ExpressionIterator::iterate_child_expr(*expr, find_unbound_column);

@@ -26,13 +26,18 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file default_handler.cpp
+ * @brief 默认存储入口的数据库生命周期管理实现。
+ */
+
 DefaultHandler::DefaultHandler() {}
 
 DefaultHandler::~DefaultHandler() noexcept { destroy(); }
 
 RC DefaultHandler::init(const char *base_dir, const char *trx_kit_name, const char *log_handler_name, const char *storage_engine)
 {
-  // 检查目录是否存在，或者创建
+  // handler 自己只负责目录骨架和数据库对象创建，不在这里做业务层权限校验。
   filesystem::path db_dir(base_dir);
   db_dir /= "db";
   error_code ec;
@@ -49,6 +54,7 @@ RC DefaultHandler::init(const char *base_dir, const char *trx_kit_name, const ch
 
   const char *sys_db = "sys";
 
+  // 启动时确保系统库存在并打开，后续 session 默认绑定到它。
   RC ret = create_db(sys_db);
   if (ret != RC::SUCCESS && ret != RC::SCHEMA_DB_EXIST) {
     LOG_ERROR("Failed to create system db");
@@ -70,6 +76,7 @@ RC DefaultHandler::init(const char *base_dir, const char *trx_kit_name, const ch
 
 void DefaultHandler::destroy()
 {
+  // 先同步，尽量把仍驻留在内存中的库状态持久化，再释放数据库对象。
   sync();
 
   for (const auto &iter : opened_dbs_) {
@@ -118,7 +125,7 @@ RC DefaultHandler::open_db(const char *dbname)
     return RC::SCHEMA_DB_NOT_EXIST;
   }
 
-  // open db
+  // Db::init 会进一步恢复日志、打开所有表以及初始化各存储子组件。
   Db *db  = new Db();
   RC  ret = RC::SUCCESS;
   if ((ret = db->init(dbname, dbpath.c_str(), trx_kit_name_.c_str(), log_handler_name_.c_str(), storage_engine_.c_str())) != RC::SUCCESS) {
@@ -172,6 +179,7 @@ RC DefaultHandler::sync()
   RC rc = RC::SUCCESS;
   for (const auto &db_pair : opened_dbs_) {
     Db *db = db_pair.second;
+    // 逐库同步，任一库失败时立即暴露错误，避免掩盖更早的持久化问题。
     rc     = db->sync();
     if (rc != RC::SUCCESS) {
       LOG_ERROR("Failed to sync db. name=%s, rc=%d:%s", db->name(), rc, strrc(rc));

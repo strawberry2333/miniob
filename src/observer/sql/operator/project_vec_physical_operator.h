@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/expression_tuple.h"
 
 /**
+ * @file project_vec_physical_operator.h
+ * @brief 向量化投影算子。
+ */
+
+/**
  * @brief 选择/投影物理算子(vectorized)
  * @ingroup PhysicalOperator
  */
@@ -28,6 +33,7 @@ public:
   PhysicalOperatorType type() const override { return PhysicalOperatorType::PROJECT_VEC; }
 
   RC open(Trx *trx) override;
+  /// @brief 直接转发已经求值完成的投影 chunk。
   RC next(Chunk &chunk) override;
   RC close() override;
 

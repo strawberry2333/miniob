@@ -31,6 +31,11 @@ class Trx;
 class Table;
 
 /**
+ * @file record_manager.h
+ * @brief 定义页式记录管理器、页面处理器和批量扫描接口。
+ */
+
+/**
  * @brief 这里负责管理在一个文件上表记录(行)的组织/管理
  * @defgroup RecordManager
  *
@@ -201,8 +206,9 @@ public:
   virtual RC delete_record(const RID *rid) { return RC::UNIMPLEMENTED; }
 
   /**
-   * @brief
-   *
+   * @brief 更新指定槽位的记录内容。
+   * @details 当前接口假设记录定长且已存在；实现方需要保证页面已按写模式加锁，
+   * 并在更新后负责记录 WAL 和脏页标记。
    */
   virtual RC update_record(const RID &rid, const char *data) { return RC::UNIMPLEMENTED; }
 

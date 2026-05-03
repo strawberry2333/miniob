@@ -17,7 +17,15 @@ See the Mulan PSL v2 for more details. */
 #include "storage/common/column.h"
 
 /**
- * @brief A Chunk represents a set of columns.
+ * @file chunk.h
+ * @brief 定义向量化执行使用的列批容器 `Chunk`。
+ * @details `Chunk` 将一批行按列组织，便于列式扫描、批量表达式计算和 PAX/向量化接口传递。
+ */
+
+/**
+ * @brief 表示一批按列组织的数据。
+ * @details `Chunk` 本身不解释列值语义，只负责维护多列对齐的行数与列标识。
+ * 大多数场景下每一列容量相同，因此 `rows/capacity` 直接以第 0 列为准。
  */
 class Chunk
 {
@@ -63,8 +71,18 @@ public:
     return column_ids_[i];
   }
 
+  /**
+   * @brief 向批中追加一列。
+   * @param col 列对象所有权会移动进 `Chunk`。
+   * @param col_id 逻辑列编号，供上层算子决定输出列映射。
+   */
   void add_column(unique_ptr<Column> col, int col_id);
 
+  /**
+   * @brief 将当前 Chunk 改为引用另一个 Chunk 的列数据。
+   * @details 该操作不会深拷贝列内容，而是复用对方列缓冲区；调用方需要保证源 `chunk`
+   * 在引用期间保持存活且不提前释放底层列数据。
+   */
   RC reference(Chunk &chunk);
 
   /**
@@ -92,11 +110,15 @@ public:
    */
   void reset_data();
 
+  /**
+   * @brief 清空列描述与列 ID 映射。
+   * @details 会释放 `Chunk` 对列对象的所有权，但不会主动清理外部被引用列的原始缓冲区。
+   */
   void reset();
 
 private:
   vector<unique_ptr<Column>> columns_;
-  // TODO: remove it and support multi-tables,
-  // `columnd_ids` store the ids of child operator that need to be output
+  /// TODO: remove it and support multi-tables.
+  /// `column_ids_` 记录上游算子输出列编号，当前仍由执行层依赖。
   vector<int> column_ids_;
 };

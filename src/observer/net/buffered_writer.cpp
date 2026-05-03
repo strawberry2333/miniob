@@ -21,6 +21,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "net/buffered_writer.h"
 
+/**
+ * @file buffered_writer.cpp
+ * @brief BufferedWriter 的顺序写入实现。
+ */
+
 BufferedWriter::BufferedWriter(int fd) : fd_(fd), buffer_() {}
 
 BufferedWriter::BufferedWriter(int fd, int32_t size) : fd_(fd), buffer_(size) {}
@@ -33,11 +38,13 @@ RC BufferedWriter::close()
     return RC::SUCCESS;
   }
 
+  // close 前先把用户态缓冲区里的数据尽量刷干净，避免响应截断。
   RC rc = flush();
   if (OB_FAIL(rc)) {
     return rc;
   }
 
+  // 这里只标记写入器不可用，不主动关闭底层连接 fd。
   fd_ = -1;
 
   return RC::SUCCESS;
@@ -50,6 +57,7 @@ RC BufferedWriter::write(const char *data, int32_t size, int32_t &write_size)
   }
 
   if (buffer_.remain() == 0) {
+    // 缓冲区已满时先尝试刷出一部分，为本次写入腾空间。
     RC rc = flush_internal(size);
     if (OB_FAIL(rc)) {
       return rc;
@@ -69,6 +77,7 @@ RC BufferedWriter::writen(const char *data, int32_t size)
   while (write_size < size) {
     int32_t tmp_write_size = 0;
 
+    // 循环写到 BufferedWriter 全量接收为止；真正落到 socket 可能发生在之后的 flush。
     RC rc = write(data + write_size, size - write_size, tmp_write_size);
     if (OB_FAIL(rc)) {
       return rc;
@@ -88,6 +97,7 @@ RC BufferedWriter::flush()
 
   RC rc = RC::SUCCESS;
   while (OB_SUCC(rc) && buffer_.size() > 0) {
+    // 每次按当前可读数据量推进，直到环形缓冲区被完全清空。
     rc = flush_internal(buffer_.size());
   }
   return rc;
@@ -105,13 +115,14 @@ RC BufferedWriter::flush_internal(int32_t size)
   while (OB_SUCC(rc) && buffer_.size() > 0 && size > write_size) {
     const char *buf       = nullptr;
     int32_t     read_size = 0;
-    rc                    = buffer_.buffer(buf, read_size);
+    rc                    = buffer_.buffer(buf, read_size);  // 取当前连续可写出的一段。
     if (OB_FAIL(rc)) {
       return rc;
     }
 
     ssize_t tmp_write_size = 0;
     while (tmp_write_size == 0) {
+      // 非阻塞 fd 上可能遇到 EINTR/EAGAIN，这两种情况重试即可。
       tmp_write_size = ::write(fd_, buf, read_size);
       if (tmp_write_size < 0) {
         if (errno == EAGAIN || errno == EINTR) {
@@ -124,7 +135,7 @@ RC BufferedWriter::flush_internal(int32_t size)
     }
 
     write_size += tmp_write_size;
-    buffer_.forward(tmp_write_size);
+    buffer_.forward(tmp_write_size);  // 只在真正写成功后推进读指针。
   }
 
   return rc;

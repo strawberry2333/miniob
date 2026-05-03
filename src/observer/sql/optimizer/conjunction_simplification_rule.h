@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 class LogicalOperator;
 
 /**
+ * @file conjunction_simplification_rule.h
+ * @brief 逻辑与/或表达式简化规则。
+ */
+
+/**
  * @brief 简化多个表达式联结的运算
  * @ingroup Rewriter
  * @details 比如只有一个表达式，或者表达式可以直接出来
@@ -29,6 +34,7 @@ public:
   ConjunctionSimplificationRule()          = default;
   virtual ~ConjunctionSimplificationRule() = default;
 
+  /// @brief 删除恒真/恒假子表达式，必要时把整个 conjunction 折叠成常量或单子节点。
   RC rewrite(unique_ptr<Expression> &expr, bool &change_made) override;
 
 private:

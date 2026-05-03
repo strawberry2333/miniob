@@ -23,6 +23,11 @@ See the Mulan PSL v2 for more details. */
 class Table;
 
 /**
+ * @file table_scan_physical_operator.h
+ * @brief 行式全表扫描算子。
+ */
+
+/**
  * @brief 表扫描物理算子
  * @ingroup PhysicalOperator
  */
@@ -60,6 +65,7 @@ public:
   }
 
   RC open(Trx *trx) override;
+  /// @brief 顺序扫描记录并在本算子内部执行可下推谓词。
   RC next() override;
   RC close() override;
 
@@ -70,6 +76,7 @@ public:
   void set_predicates(vector<unique_ptr<Expression>> &&exprs);
 
 private:
+  /// @brief 对当前记录执行下推谓词，语义上等价于若干个 AND 条件。
   RC filter(RowTuple &tuple, bool &result);
 
 private:

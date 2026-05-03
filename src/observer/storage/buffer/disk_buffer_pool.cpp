@@ -23,6 +23,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/buffer/buffer_pool_log.h"
 #include "storage/db/db.h"
 
+/**
+ * @file disk_buffer_pool.cpp
+ * @brief 缓冲池页分配、置换、刷盘与恢复实现。
+ */
+
 using namespace common;
 
 static const int MEM_POOL_ITEM_NUM = 20;
@@ -228,6 +233,7 @@ DiskBufferPool::~DiskBufferPool()
 
 RC DiskBufferPool::open_file(const char *file_name)
 {
+  // 先打开物理文件并读取第 0 页，再把 header page 接入 frame 管理体系。
   int fd = open(file_name, O_RDWR);
   if (fd < 0) {
     LOG_ERROR("Failed to open file %s, because %s.", file_name, strerror(errno));
@@ -356,7 +362,7 @@ RC DiskBufferPool::allocate_page(Frame **frame)
 
   int byte = 0, bit = 0;
   if ((file_header_->allocated_pages) < (file_header_->page_count)) {
-    // There is one free page
+    // 优先复用位图中已经存在但当前未分配的页，避免无谓扩文件。
     for (int i = 0; i < file_header_->page_count; i++) {
       byte = i / 8;
       bit  = i % 8;
@@ -544,8 +550,7 @@ RC DiskBufferPool::flush_page(Frame &frame)
 
 RC DiskBufferPool::flush_page_internal(Frame &frame)
 {
-  // The better way is use mmap the block into memory,
-  // so it is easier to flush data to file.
+  // 刷页前先满足 WAL 约束，再更新 checksum，并通过 double write buffer 规避 torn write。
 
   RC rc = log_handler_.flush_page(frame.page());
   if (OB_FAIL(rc)) {
@@ -920,4 +925,3 @@ RC BufferPoolManager::get_buffer_pool(int32_t id, DiskBufferPool *&bp)
   bp = iter->second;
   return RC::SUCCESS;
 }
-

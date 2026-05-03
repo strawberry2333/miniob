@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "storage/index/index.h"
 
+/**
+ * @file index.cpp
+ * @brief 索引抽象基类的公共初始化实现。
+ */
+
 RC Index::init(const IndexMeta &index_meta, const FieldMeta &field_meta)
 {
   index_meta_ = index_meta;

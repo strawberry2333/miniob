@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include <stdint.h>
 
 /**
+ * @file log_module.h
+ * @brief 定义日志所属模块枚举。
+ */
+
+/**
  * @brief 日志模块
  * @ingroup CLog
  */

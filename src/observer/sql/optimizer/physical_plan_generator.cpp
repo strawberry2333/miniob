@@ -46,6 +46,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file physical_plan_generator.cpp
+ * @brief 逻辑计划到物理计划的映射实现。
+ */
+
 RC PhysicalPlanGenerator::create(LogicalOperator &logical_operator, unique_ptr<PhysicalOperator> &oper, Session* session)
 {
   RC rc = RC::SUCCESS;
@@ -161,6 +166,7 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
       const Field &field = field_expr->field();
       index              = table->find_index_by_field(field.field_name());
       if (nullptr != index) {
+        // 只要找到一个可用索引的简单比较条件，就优先尝试走索引扫描。
         break;
       }
     }
@@ -310,6 +316,7 @@ RC PhysicalPlanGenerator::create_plan(JoinLogicalOperator &join_oper, unique_ptr
   if (session->hash_join_on() && can_use_hash_join(join_oper)) {
     // your code here
   } else {
+    // 默认退化为 nested loop join，真正的连接过滤仍由上层谓词算子完成。
     unique_ptr<PhysicalOperator> join_physical_oper(new NestedLoopJoinPhysicalOperator());
     for (auto &child_oper : child_opers) {
       unique_ptr<PhysicalOperator> child_physical_oper;
@@ -390,6 +397,7 @@ RC PhysicalPlanGenerator::create_vec_plan(GroupByLogicalOperator &logical_oper, 
   if (logical_oper.group_by_expressions().empty()) {
     physical_oper = make_unique<AggregateVecPhysicalOperator>(std::move(logical_oper.aggregate_expressions()));
   } else {
+    // 向量化 group by 已预留入口，但当前实现仍是占位版本。
     physical_oper = make_unique<GroupByVecPhysicalOperator>(
       std::move(logical_oper.group_by_expressions()), std::move(logical_oper.aggregate_expressions()));
 
@@ -436,6 +444,7 @@ RC PhysicalPlanGenerator::create_vec_plan(ProjectLogicalOperator &project_oper, 
     for (auto &expr : project_operator->expressions()) {
       expressions.push_back(expr.get());
     }
+    // 向量化投影需要先把表达式列计算出来，再由上层 `ProjectVecPhysicalOperator` 暴露结果。
     auto expr_operator = make_unique<ExprVecPhysicalOperator>(std::move(expressions));
     expr_operator->add_child(std::move(child_phy_oper));
     project_operator->add_child(std::move(expr_operator));

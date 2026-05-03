@@ -14,5 +14,10 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/insert_logical_operator.h"
 
+/**
+ * @file insert_logical_operator.cpp
+ * @brief `InsertLogicalOperator` 的构造实现。
+ */
+
 InsertLogicalOperator::InsertLogicalOperator(Table *table, vector<Value> values) : table_(table), values_(values)
 {}

@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/logical_operator.h"
 
 /**
+ * @file explain_logical_operator.h
+ * @brief `EXPLAIN` 包装算子的逻辑层定义。
+ */
+
+/**
  * @brief Explain逻辑算子
  * @ingroup LogicalOperator
  */

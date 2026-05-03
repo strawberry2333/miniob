@@ -20,6 +20,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/math/crc.h"
 #include <algorithm>
 
+/**
+ * @file double_write_buffer.cpp
+ * @brief Double write buffer 的磁盘落盘与恢复实现。
+ */
+
 using namespace common;
 
 struct DoubleWritePage
@@ -299,4 +304,3 @@ RC VacuousDoubleWriteBuffer::add_page(DiskBufferPool *bp, PageNum page_num, Page
 {
   return bp->write_page(page_num, page);
 }
-

@@ -17,7 +17,13 @@ See the Mulan PSL v2 for more details. */
 #include "storage/trx/trx.h"
 
 /**
- * @brief Vacuous(真空的)，顾名思义就是没有实现事务功能
+ * @file vacuous_trx.h
+ * @brief 定义不提供隔离与持久化语义的空事务实现。
+ */
+
+/**
+ * @brief Vacuous(真空的)，顾名思义就是没有实现事务功能。
+ * @details 主要用于教学早期阶段、功能裁剪模式和某些无需事务语义的测试场景。
  */
 class VacuousTrxKit : public TrxKit
 {

@@ -20,6 +20,11 @@ See the Mulan PSL v2 for more details. */
 const int UNDEFINED_GROUP = -1;
 
 /**
+ * @file memo.h
+ * @brief 级联优化器 memo 结构。
+ */
+
+/**
  * @brief: memorization
  * @details: Memo class for tracking Groups and GroupExpressions and provides the
  * mechanisms by which we can do duplicate group detection.
@@ -34,6 +39,7 @@ public:
 
   GroupExpr *insert_expression(GroupExpr *gexpr) { return insert_expression(gexpr, -1); }
 
+  /// @brief 插入一个表达式到 memo，并返回 memo 中最终保留的实例。
   GroupExpr *insert_expression(GroupExpr *gexpr, int target_group);
 
   Group *get_group_by_id(int id) const
@@ -45,6 +51,7 @@ public:
 
   void dump() const;
 
+  /// @brief 记录优化过程中临时创建的算子节点所有权，便于统一回收。
   void record_operator(unique_ptr<OperatorNode> &&node) { operator_nodes_.emplace(node.get(), std::move(node)); }
 
   void release_operator(OperatorNode *node)
@@ -56,6 +63,7 @@ public:
   }
 
 private:
+  /// @brief 为一棵全新表达式创建新的等价类。
   int add_new_group(GroupExpr *gexpr);
 
   struct GExprPtrHash

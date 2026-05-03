@@ -27,11 +27,17 @@ See the Mulan PSL v2 for more details. */
 #include "sql/executor/trx_end_executor.h"
 #include "sql/stmt/stmt.h"
 
+/**
+ * @file command_executor.cpp
+ * @brief 实现命令类语句到具体 executor 的分发逻辑。
+ */
+
 RC CommandExecutor::execute(SQLStageEvent *sql_event)
 {
   Stmt *stmt = sql_event->stmt();
 
   RC rc = RC::SUCCESS;
+  // 这里按语句类型做一次集中分发，避免 ExecuteStage 持有大量命令细节。
   switch (stmt->type()) {
     case StmtType::CREATE_INDEX: {
       CreateIndexExecutor executor;
@@ -95,7 +101,7 @@ RC CommandExecutor::execute(SQLStageEvent *sql_event)
   }
 
   if (OB_SUCC(rc) && stmt_type_ddl(stmt->type())) {
-    // 每次做完DDL之后，做一次sync，保证元数据与日志保持一致
+    // DDL 成功后立即刷盘，尽量保证元数据和日志状态同步。
     rc = sql_event->session_event()->session()->get_current_db()->sync();
     LOG_INFO("sync db after ddl. rc=%d", rc);
   }

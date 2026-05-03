@@ -20,6 +20,11 @@ See the Mulan PSL v2 for more details. */
 class LogicalOperator;
 
 /**
+ * @file comparison_simplification_rule.h
+ * @brief 比较表达式常量折叠规则。
+ */
+
+/**
  * @brief 简单比较的重写规则
  * @ingroup Rewriter
  * @details 如果有简单的比较运算，比如比较的两边都是常量，那我们就可以在运行执行计划之前就知道结果，
@@ -31,6 +36,7 @@ public:
   ComparisonSimplificationRule()          = default;
   virtual ~ComparisonSimplificationRule() = default;
 
+  /// @brief 尝试把可提前求值的比较表达式替换成常量布尔值。
   RC rewrite(unique_ptr<Expression> &expr, bool &change_made) override;
 
 private:

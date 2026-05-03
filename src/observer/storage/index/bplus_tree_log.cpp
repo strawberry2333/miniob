@@ -24,6 +24,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/serializer.h"
 #include "storage/clog/vacuous_log_handler.h"
 
+/**
+ * @file bplus_tree_log.cpp
+ * @brief B+ 树 mini-transaction 日志聚合、提交与回滚实现。
+ */
+
 using namespace common;
 using namespace bplus_tree;
 

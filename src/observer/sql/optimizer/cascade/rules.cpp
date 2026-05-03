@@ -12,8 +12,14 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/implementation_rules.h"
 #include "sql/optimizer/cascade/group_expr.h"
 
+/**
+ * @file rules.cpp
+ * @brief 默认规则集注册逻辑。
+ */
+
 RuleSet::RuleSet()
 {
+  // 当前仅注册 logical->physical 的实现规则；逻辑变换规则尚未接入。
   add_rule(RuleSetName::PHYSICAL_IMPLEMENTATION, new LogicalProjectionToProjection());
   add_rule(RuleSetName::PHYSICAL_IMPLEMENTATION, new LogicalGetToPhysicalSeqScan());
   add_rule(RuleSetName::PHYSICAL_IMPLEMENTATION, new LogicalInsertToInsert());

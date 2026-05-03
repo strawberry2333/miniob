@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file record_manager.cpp
+ * @brief 页式记录管理器、页处理器与批量扫描器的核心实现。
+ */
+
 static constexpr int PAGE_HEADER_SIZE = (sizeof(PageHeader));
 RecordPageHandler   *RecordPageHandler::create(StorageFormat format)
 {
@@ -76,6 +81,7 @@ void RecordPageIterator::init(RecordPageHandler *record_page_handler, SlotNum st
   record_page_handler_ = record_page_handler;
   page_num_            = record_page_handler->get_page_num();
   bitmap_.init(record_page_handler->bitmap_, record_page_handler->page_header_->record_capacity);
+  // 迭代器只沿着已占用的槽位推进，不会访问 bitmap 中未置位的位置。
   next_slot_num_ = bitmap_.next_setted_bit(start_slot_num);
 }
 
@@ -116,6 +122,7 @@ RC RecordPageHandler::init(DiskBufferPool &buffer_pool, LogHandler &log_handler,
 
   char *data = frame_->data();
 
+  // 初始化时就根据访问模式拿到页锁，保证后续记录指针直接引用页内内存时仍然安全。
   if (mode == ReadWriteMode::READ_ONLY) {
     frame_->read_latch();
   } else {
@@ -148,6 +155,7 @@ RC RecordPageHandler::recover_init(DiskBufferPool &buffer_pool, PageNum page_num
 
   char *data = frame_->data();
 
+  // 恢复阶段没有并发读写者，但仍统一走写锁路径，复用正常修改流程对页面结构的假设。
   frame_->write_latch();
   disk_buffer_pool_ = &buffer_pool;
   rw_mode_          = ReadWriteMode::READ_WRITE;
@@ -173,7 +181,7 @@ RC RecordPageHandler::init_empty_page(DiskBufferPool &buffer_pool, LogHandler &l
   (void)log_handler_.init(log_handler, buffer_pool.id(), record_size, storage_format_);
 
   int column_num = 0;
-  // only pax format need column index
+  // 只有 PAX 页面需要额外的列偏移索引；行存页只需要页头和占用位图。
   if (table_meta != nullptr && storage_format_ == StorageFormat::PAX_FORMAT) {
     column_num = table_meta->field_num();
   }
@@ -193,7 +201,7 @@ RC RecordPageHandler::init_empty_page(DiskBufferPool &buffer_pool, LogHandler &l
 
   bitmap_ = frame_->data() + PAGE_HEADER_SIZE;
   memset(bitmap_, 0, page_bitmap_size(page_header_->record_capacity));
-  // column_index[i] store the end offset of column `i` or the start offset of column `i+1`
+  // `column_index[i]` 保存列 i 在列式区间内的结束位置，也就是下一列的起始偏移。
 
   // 计算列偏移
   int *column_index = reinterpret_cast<int *>(frame_->data() + page_header_->col_idx_offset);
@@ -206,6 +214,7 @@ RC RecordPageHandler::init_empty_page(DiskBufferPool &buffer_pool, LogHandler &l
     }
   }
 
+  // 页头和列索引初始化完成后立即记录 WAL，确保崩溃恢复时能重新构造该页布局。
   rc = log_handler_.init_new_page(frame_, page_num, span((const char *)column_index, column_num * sizeof(int)));
   if (OB_FAIL(rc)) {
     LOG_ERROR("Failed to init empty page: write log failed. page_num:record_size %d:%d. rc=%s", 

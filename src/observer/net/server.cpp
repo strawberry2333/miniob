@@ -42,6 +42,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file server.cpp
+ * @brief 网络服务入口与 CLI 服务入口的实现。
+ */
+
 ServerParam::ServerParam()
 {
   listen_addr        = INADDR_ANY;
@@ -76,6 +81,7 @@ int NetServer::set_non_block(int fd)
 
 void NetServer::accept(int fd)
 {
+  // accept 只负责建立连接和初始化连接对象；真正的请求处理交给 ThreadHandler。
   struct sockaddr_in addr;
   socklen_t          addrlen = sizeof(addr);
 
@@ -116,6 +122,7 @@ void NetServer::accept(int fd)
   }
 
   Communicator *communicator = communicator_factory_.create(server_param_.protocol);
+  // 每个新连接都绑定一个默认 Session，后续由 SQL 流水线逐步填充上下文。
 
   RC rc = communicator->init(client_fd, make_unique<Session>(Session::default_session()), addr_str);
   if (rc != RC::SUCCESS) {
@@ -136,6 +143,7 @@ void NetServer::accept(int fd)
 
 int NetServer::start()
 {
+  // 三种入口模式互斥：stdio、unix socket、tcp socket。
   if (server_param_.use_std_io) {
     return -1;
   } else if (server_param_.use_unix_socket) {
@@ -266,6 +274,7 @@ int NetServer::serve()
     poll_fd.revents = 0;
 
     while (started_) {
+      // 监听 socket 单独用 poll 驱动；连接建立后的收发由 thread handler 接管。
       int ret = poll(&poll_fd, 1, 500);
       if (ret < 0) {
         LOG_WARN("[listen socket] poll error. fd = %d, ret = %d, error=%s", poll_fd.fd, ret, strerror(errno));
@@ -280,10 +289,12 @@ int NetServer::serve()
         break;
       }
 
+      // 当前实现每次触发只 accept 一个连接；下次 poll 会继续处理 backlog 中剩余连接。
       this->accept(server_socket_);
     }
   }
 
+  // 先停止接收新任务，再等待连接线程/线程池把存量任务清干净。
   thread_handler_->stop();
   thread_handler_->await_stop();
   delete thread_handler_;
@@ -298,7 +309,7 @@ void NetServer::shutdown()
 {
   LOG_INFO("NetServer shutting down");
 
-  // cleanup
+  // serve 主循环会读取该标记并自行退出，资源释放统一放在退出路径中处理。
   started_ = false;
 }
 
@@ -327,6 +338,7 @@ int CliServer::serve()
 
   SqlTaskHandler task_handler;
   while (started_ && !communicator.exit()) {
+    // CLI 模式没有连接管理，每次循环直接同步处理一条命令。
     rc = task_handler.handle_event(&communicator);
     if (OB_FAIL(rc)) {
       started_ = false;
@@ -341,6 +353,6 @@ void CliServer::shutdown()
 {
   LOG_INFO("CliServer shutting down");
 
-  // cleanup
+  // 通过标记位让 CLI 主循环自然结束。
   started_ = false;
 }

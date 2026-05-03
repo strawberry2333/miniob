@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "event/sql_event.h"
 #include "session/session.h"
 
+/**
+ * @file sql_task_handler.cpp
+ * @brief 将网络请求驱动到 SQL 执行链路的实现。
+ */
+
 RC SqlTaskHandler::handle_event(Communicator *communicator)
 {
   SessionEvent *event = nullptr;
@@ -27,9 +32,11 @@ RC SqlTaskHandler::handle_event(Communicator *communicator)
   }
 
   if (nullptr == event) {
+    // 某些协议交互（例如握手）不会产出 SQL 请求，直接返回即可。
     return RC::SUCCESS;
   }
 
+  // 先把当前请求挂到 session/thread 上，为后续各阶段提供上下文。
   session_stage_.handle_request2(event);
 
   SQLStageEvent sql_event(event, event->query());
@@ -44,6 +51,8 @@ RC SqlTaskHandler::handle_event(Communicator *communicator)
 
   rc = communicator->write_result(event, need_disconnect);
   LOG_INFO("write result return %s", strrc(rc));
+
+  // 无论写回成功与否，都要清空线程局部的当前请求，避免污染下一次处理。
   event->session()->set_current_request(nullptr);
   Session::set_current_session(nullptr);
 
@@ -57,6 +66,7 @@ RC SqlTaskHandler::handle_event(Communicator *communicator)
 
 RC SqlTaskHandler::handle_sql(SQLStageEvent *sql_event)
 {
+  // 执行顺序与经典数据库流水线一致，任一阶段失败都直接短路返回。
   RC rc = query_cache_stage_.handle_request(sql_event);
   if (OB_FAIL(rc)) {
     LOG_TRACE("failed to do query cache. rc=%s", strrc(rc));
@@ -81,6 +91,7 @@ RC SqlTaskHandler::handle_sql(SQLStageEvent *sql_event)
     return rc;
   }
 
+  // optimize 暂未覆盖的语句允许走 execute 阶段继续处理。
   rc = execute_stage_.handle_request(sql_event);
   if (OB_FAIL(rc)) {
     LOG_TRACE("failed to do execute. rc=%s", strrc(rc));

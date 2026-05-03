@@ -18,7 +18,14 @@ See the Mulan PSL v2 for more details. */
 using namespace oceanbase;
 
 /**
- * @brief lsm table engine
+ * @file lsm_table_engine.h
+ * @brief 定义对接 ObLsm 的 LSM 表引擎。
+ */
+
+/**
+ * @brief LSM 表引擎。
+ * @details 当前实现仍在演进中，主要承担主数据写入和 LSM 扫描器构造，
+ * 大量事务/索引能力仍保持 `UNIMPLEMENTED`。
  */
 class LsmTableEngine : public TableEngine
 {
@@ -28,6 +35,7 @@ public:
   {}
   ~LsmTableEngine() override = default;
 
+  /// @brief 将记录编码成 LSM key/value 后写入底层 ObLsm。
   RC insert_record(Record &record) override;
   RC insert_chunk(const Chunk &chunk) override { return RC::UNIMPLEMENTED; }
   RC delete_record(const Record &record) override { return RC::UNIMPLEMENTED; }
@@ -40,6 +48,7 @@ public:
   RC get_record(const RID &rid, Record &record) override { return RC::UNIMPLEMENTED; }
 
   RC create_index(Trx *trx, const FieldMeta *field_meta, const char *index_name) override { return RC::UNIMPLEMENTED; }
+  /// @brief 创建基于 ObLsm 迭代器的记录扫描器。
   RC get_record_scanner(RecordScanner *&scanner, Trx *trx, ReadWriteMode mode) override;
   RC get_chunk_scanner(ChunkFileScanner &scanner, Trx *trx, ReadWriteMode mode) override { return RC::UNIMPLEMENTED; }
   RC visit_record(const RID &rid, function<bool(Record &)> visitor) override { return RC::UNIMPLEMENTED; }
@@ -47,6 +56,7 @@ public:
   RC     sync() override { return RC::SUCCESS; }
   Index *find_index(const char *index_name) const override { return nullptr; }
   Index *find_index_by_field(const char *field_name) const override { return nullptr; }
+  /// @brief 打开已有 LSM 表。目前尚未完整实现元数据恢复逻辑。
   RC     open() override;
   RC     init() override { return RC::UNIMPLEMENTED; }
 

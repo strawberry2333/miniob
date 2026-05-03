@@ -22,6 +22,15 @@ class CLogManager;
 class LogHandler;
 class MvccTrxLogHandler;
 
+/**
+ * @file mvcc_trx.h
+ * @brief 定义基于隐藏 begin/end xid 字段的 MVCC 事务模型。
+ */
+
+/**
+ * @brief MVCC 事务管理器。
+ * @details 负责分配事务 ID、维护活动事务集合，并向表 schema 注入事务隐藏列定义。
+ */
 class MvccTrxKit : public TrxKit
 {
 public:
@@ -55,9 +64,9 @@ private:
 };
 
 /**
- * @brief 多版本并发事务
+ * @brief 多版本并发事务。
  * @ingroup Transaction
- * TODO 没有垃圾回收
+ * @details 通过记录上的 begin/end xid 隐藏列判定可见性；当前未实现版本垃圾回收。
  */
 class MvccTrx : public Trx
 {

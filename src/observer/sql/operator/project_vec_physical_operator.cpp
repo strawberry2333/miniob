@@ -15,6 +15,13 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file project_vec_physical_operator.cpp
+ * @brief 向量化投影算子的实现。
+ * @details 真正的表达式列求值由下游 `ExprVecPhysicalOperator` 完成，这里主要负责
+ * 初始化输出列元信息并把结果 chunk 暴露给上层。
+ */
+
 ProjectVecPhysicalOperator::ProjectVecPhysicalOperator(vector<unique_ptr<Expression>> &&expressions)
     : expressions_(std::move(expressions))
 {
@@ -48,6 +55,7 @@ RC ProjectVecPhysicalOperator::next(Chunk &chunk)
   if (rc == RC::RECORD_EOF) {
     return rc;
   } else if (rc == RC::SUCCESS) {
+    // 这里不重新 materialize 列，只把子 chunk 的结果按引用交给上层使用。
     rc = chunk.reference(chunk_);
   } else {
     LOG_WARN("failed to get next tuple: %s", strrc(rc));

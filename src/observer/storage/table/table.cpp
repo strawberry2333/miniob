@@ -35,6 +35,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/table/heap_table_engine.h"
 #include "storage/table/lsm_table_engine.h"
 
+/**
+ * @file table.cpp
+ * @brief 逻辑表对象对元数据、引擎和记录构造的协调实现。
+ */
+
 Table::~Table()
 {
   if (lob_handler_ != nullptr) {
@@ -64,8 +69,7 @@ RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, c
 
   RC rc = RC::SUCCESS;
 
-  // 使用 table_name.table记录一个表的元数据
-  // 判断表文件是否已经存在
+  // 先占住元数据文件名，再初始化内存元数据，避免并发/重复创建时覆盖已有表定义。
   int fd = ::open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
   if (fd < 0) {
     if (EEXIST == errno) {
@@ -78,7 +82,7 @@ RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, c
 
   close(fd);
 
-  // 创建文件
+  // 表 schema 初始化会顺便把事务隐藏列拼接到真实字段前面，并计算最终记录长度。
   const vector<FieldMeta> *trx_fields = db->trx_kit().trx_fields();
   if ((rc = table_meta_.init(table_id, name, trx_fields, attributes, primary_keys, storage_format, storage_engine)) != RC::SUCCESS) {
     LOG_ERROR("Failed to init table meta. name:%s, ret:%d", name, rc);
@@ -92,7 +96,7 @@ RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, c
     return RC::IOERR_OPEN;
   }
 
-  // 记录元数据到文件中
+  // 只有元数据先持久化成功，后续数据文件和索引文件的创建才有恢复入口。
   table_meta_.serialize(fs);
   fs.close();
 
@@ -106,6 +110,7 @@ RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, c
     return rc;
   }
 
+  // Table 只负责根据元数据选择具体引擎，后续读写全部下沉给 engine_。
   if (table_meta_.storage_engine() == StorageEngine::HEAP) {
     engine_ = make_unique<HeapTableEngine>(&table_meta_, db_, this);
   } else if (table_meta_.storage_engine() == StorageEngine::LSM) {
@@ -127,7 +132,7 @@ RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, c
 
 RC Table::open(Db *db, const char *meta_file, const char *base_dir)
 {
-  // 加载元数据文件
+  // 先恢复表元数据，再根据其中记录的存储引擎装配对应实现。
   fstream fs;
   string  meta_file_path = string(base_dir) + common::FILE_PATH_SPLIT_STR + meta_file;
   fs.open(meta_file_path, ios_base::in | ios_base::binary);
@@ -213,14 +218,14 @@ const TableMeta &Table::table_meta() const { return table_meta_; }
 RC Table::make_record(int value_num, const Value *values, Record &record)
 {
   RC rc = RC::SUCCESS;
-  // 检查字段类型是否一致
+  // 输入值只对应用户可见字段；事务隐藏列由引擎/事务层自行维护。
   if (value_num + table_meta_.sys_field_num() != table_meta_.field_num()) {
     LOG_WARN("Input values don't match the table's schema, table name:%s", table_meta_.name());
     return RC::SCHEMA_FIELD_MISSING;
   }
 
   const int normal_field_start_index = table_meta_.sys_field_num();
-  // 复制所有字段的值
+  // 一次性分配整条记录缓冲区，后续按字段偏移顺序写入。
   int   record_size = table_meta_.record_size();
   char *record_data = (char *)malloc(record_size);
   memset(record_data, 0, record_size);
@@ -229,6 +234,7 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
     const Value &    value = values[i];
     if (field->type() != value.attr_type()) {
+      // 允许在构造记录时做一次显式类型转换，避免把表达式层的临时类型硬塞进物理布局。
       Value real_value;
       rc = Value::cast_to(value, field->type(), real_value);
       if (OB_FAIL(rc)) {
@@ -257,6 +263,7 @@ RC Table::set_value_to_record(char *record_data, const Value &value, const Field
   const size_t data_len = value.length();
   if (field->type() == AttrType::CHARS) {
     if (copy_len > data_len) {
+      // CHAR 字段保留一个结尾 0，便于后续按照字符串读取。
       copy_len = data_len + 1;
     }
   }

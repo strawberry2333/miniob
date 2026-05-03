@@ -17,7 +17,12 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/stmt.h"
 
 /**
- * @brief Exit 语句，表示断开连接，现在什么成员都没有
+ * @file exit_stmt.h
+ * @brief 定义 `EXIT` 语句的语义对象。
+ */
+
+/**
+ * @brief 表示客户端请求断开连接的语句。
  * @ingroup Statement
  */
 class ExitStmt : public Stmt
@@ -28,6 +33,11 @@ public:
 
   StmtType type() const override { return StmtType::EXIT; }
 
+  /**
+   * @brief 创建一个无状态的 `ExitStmt`。
+   * @param stmt 输出语句对象。
+   * @return 总是返回 `RC::SUCCESS`。
+   */
   static RC create(Stmt *&stmt)
   {
     stmt = new ExitStmt();

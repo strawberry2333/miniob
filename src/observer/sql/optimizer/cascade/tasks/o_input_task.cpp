@@ -15,6 +15,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/memo.h"
 #include "common/log/log.h"
 
+/**
+ * @file o_input_task.cpp
+ * @brief 物理表达式输入优化任务实现。
+ */
+
 void OptimizeInputs::perform()
 {
   LOG_TRACE("OptimizeInputs::perform()");
@@ -33,11 +38,13 @@ void OptimizeInputs::perform()
     // check whether the child group is already optimized
     auto child_best_expr = child_group->get_winner();
     if (child_best_expr != nullptr) {
+      // 孩子 group 已有 winner 时，直接把它的最优代价累加进当前物理表达式总代价。
       cur_total_cost_ += child_best_expr->get_cost();
       LOG_INFO("cur_total_cost_ = %f", cur_total_cost_);
       if (cur_total_cost_ > context_->get_cost_upper_bound()) break;
     } else if (prev_child_idx_ != cur_child_idx_) {  // we haven't optimized child group
       prev_child_idx_ = cur_child_idx_;
+      // 先把自己压回任务栈，再去优化缺失 winner 的孩子 group，回来后继续累加。
       push_task(new OptimizeInputs(this));
       push_task(new OptimizeGroup(child_group, context_));
       return;

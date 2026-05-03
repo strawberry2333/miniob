@@ -16,6 +16,11 @@ See the Mulan PSL v2 for more details. */
 using namespace std;
 using namespace common;
 
+/**
+ * @file expr_vec_physical_operator.cpp
+ * @brief 向量化表达式求值算子的实现。
+ */
+
 ExprVecPhysicalOperator::ExprVecPhysicalOperator(vector<Expression *> &&expressions)
 {
   expressions_ = std::move(expressions);
@@ -46,6 +51,7 @@ RC ExprVecPhysicalOperator::next(Chunk &chunk)
   if (OB_SUCC(rc = child.next(chunk_))) {
     for (size_t i = 0; i < expressions_.size(); i++) {
       auto column = make_unique<Column>();
+      // 每个表达式都基于同一份输入 chunk 求值，结果列按表达式顺序写入临时 chunk。
       expressions_[i]->get_column(chunk_, *column);
       evaled_chunk_.add_column(std::move(column), i);
     }

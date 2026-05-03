@@ -4,6 +4,9 @@
 定义yy_size_t的原因是因为flex生成的代码，会使用yy_size_t与其他类型的数字
 做比较，导致编译报警
 */
+/* @file lex_sql.l
+ * @brief MiniOB SQL 词法规则定义。
+ */
 #define YY_TYPEDEF_YY_SIZE_T
 typedef int yy_size_t;
 
@@ -75,12 +78,15 @@ QUOTE            [\'\"]
 /* yylval 就可以认为是 yacc 中 %union 定义的结构体(union 结构) */
 %%
 
+  /* 空白与换行：不产出 token，只推进位置信息。 */
 {WHITE_SPACE}                                        // ignore whitespace
 \n                                                   ;
 
+  /* 数值字面量。 */
 {DIGIT}+                           yylval->number=atoi(yytext); RETURN_TOKEN(NUMBER);
 {DIGIT}+{DOT}{DIGIT}+              yylval->floats=(float)(atof(yytext)); RETURN_TOKEN(FLOAT);
 
+  /* 标点与关键字。词法层统一做大小写不敏感匹配。 */
 ";"                                     RETURN_TOKEN(SEMICOLON);
 {DOT}                                   RETURN_TOKEN(DOT);
 EXIT                                    RETURN_TOKEN(EXIT);
@@ -126,10 +132,13 @@ ANALYZE                                 RETURN_TOKEN(ANALYZE);
 FIELDS                                  RETURN_TOKEN(FIELDS);
 TERMINATED                              RETURN_TOKEN(TERMINATED);
 ENCLOSED                                RETURN_TOKEN(ENCLOSED);
+
+  /* 标识符与括号。标识符会复制一份到 `yyextra` 中，统一在 parse 结束后释放。 */
 {ID}                                    yylval->cstring=strdup(yytext); static_cast<std::vector<char*>*>(yyextra)->push_back(yylval->cstring); RETURN_TOKEN(ID);
 "("                                     RETURN_TOKEN(LBRACE);
 ")"                                     RETURN_TOKEN(RBRACE);
 
+  /* 分隔符与比较运算符。 */
 ","                                     RETURN_TOKEN(COMMA);
 "="                                     RETURN_TOKEN(EQ);
 "<="                                    RETURN_TOKEN(LE);
@@ -139,16 +148,25 @@ ENCLOSED                                RETURN_TOKEN(ENCLOSED);
 ">="                                    RETURN_TOKEN(GE);
 ">"                                     RETURN_TOKEN(GT);
 
+  /* 算术运算符直接把字符本身交给 yacc。 */
 "+" |
 "-" |
 "*" |
 "/"                                     { return yytext[0]; }
+
+  /* 字符串字面量保留引号，语法层再按需要剥离首尾。 */
 \"[^"]*\"                               yylval->cstring = strdup(yytext); static_cast<std::vector<char*>*>(yyextra)->push_back(yylval->cstring); RETURN_TOKEN(SSS);
 '[^']*\'                                yylval->cstring = strdup(yytext); static_cast<std::vector<char*>*>(yyextra)->push_back(yylval->cstring); RETURN_TOKEN(SSS);
 
+  /* 兜底分支：把未知字符直接返回给 yacc，方便触发语法错误分支。 */
 .                                       LOG_DEBUG("Unknown character [%c]",yytext[0]); return yytext[0];
 %%
 
+/**
+ * @brief 把一段 SQL 字符串绑定成当前 scanner 的输入缓冲区。
+ * @param str 原始 SQL 文本。
+ * @param scanner flex reentrant scanner。
+ */
 void scan_string(const char *str, yyscan_t scanner) {
   yy_switch_to_buffer(yy_scan_string(str, scanner), scanner);
 }

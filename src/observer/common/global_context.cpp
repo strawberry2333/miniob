@@ -14,6 +14,12 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/global_context.h"
 
+/**
+ * @brief GlobalContext 的实现文件。
+ * @details 通过一个进程级静态对象统一承载 observer 运行期间的共享上下文。
+ */
+
 static GlobalContext global_context;
 
+/// @brief 返回唯一的全局上下文实例。
 GlobalContext &GlobalContext::instance() { return global_context; }

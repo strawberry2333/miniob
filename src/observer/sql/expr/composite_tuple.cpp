@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file composite_tuple.cpp
+ * @brief `CompositeTuple` 的顺序展开实现。
+ */
+
 int CompositeTuple::cell_num() const
 {
   int num = 0;
@@ -30,6 +35,7 @@ RC CompositeTuple::cell_at(int index, Value &cell) const
 {
   for (const auto &tuple : tuples_) {
     if (index < tuple->cell_num()) {
+      // 每个子 tuple 都被视作一段连续区间，命中后直接委托给它处理局部下标。
       return tuple->cell_at(index, cell);
     } else {
       index -= tuple->cell_num();
@@ -56,6 +62,7 @@ RC CompositeTuple::find_cell(const TupleCellSpec &spec, Value &cell) const
   for (const auto &tuple : tuples_) {
     rc = tuple->find_cell(spec, cell);
     if (OB_SUCC(rc)) {
+      // 找到首个匹配列后立即返回，保持与 join 结果“左侧优先”的查找语义一致。
       break;
     }
   }

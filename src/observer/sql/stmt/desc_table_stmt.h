@@ -19,22 +19,34 @@ See the Mulan PSL v2 for more details. */
 class Db;
 
 /**
- * @brief 描述表的语句
+ * @file desc_table_stmt.h
+ * @brief 定义 `DESC` 语句的语义对象。
+ */
+
+/**
+ * @brief 表示查看表结构的语句。
  * @ingroup Statement
- * @details 虽然解析成了stmt，但是与原始的SQL解析后的数据也差不多
+ * @details 这一层只保留目标表名，并提前检查表是否存在。
  */
 class DescTableStmt : public Stmt
 {
 public:
+  /**
+   * @brief 以目标表名构造描述表语句。
+   */
   DescTableStmt(const string &table_name) : table_name_(table_name) {}
   virtual ~DescTableStmt() = default;
 
   StmtType type() const override { return StmtType::DESC_TABLE; }
 
+  /// 返回目标表名。
   const string &table_name() const { return table_name_; }
 
+  /**
+   * @brief 从 parse 节点构造 `DescTableStmt`。
+   */
   static RC create(Db *db, const DescTableSqlNode &desc_table, Stmt *&stmt);
 
 private:
-  string table_name_;
+  string table_name_;  ///< 目标表名
 };

@@ -23,6 +23,13 @@ class TupleCellSpec;
 class Trx;
 
 /**
+ * @file physical_operator.h
+ * @brief 物理执行计划节点抽象。
+ * @details 物理算子描述“如何执行”，负责真正拉取 tuple/chunk、维护运行时状态，
+ * 并以树形结构组成执行器。
+ */
+
+/**
  * @brief 物理算子
  * @defgroup PhysicalOperator
  * @details 物理算子描述执行计划将如何执行，比如从表中怎么获取数据，如何做投影，怎么做连接等
@@ -77,15 +84,25 @@ public:
 
   virtual PhysicalOperatorType type() const = 0;
 
+  /**
+   * @brief 打开算子并初始化运行时资源。
+   * @details 执行器在首次拉取数据前调用，通常会级联打开子算子。
+   */
   virtual RC open(Trx *trx) = 0;
+  /// @brief 逐行执行接口，返回下一条 tuple 是否可用。
   virtual RC next() { return RC::UNIMPLEMENTED; }
+  /// @brief 向量化执行接口，返回下一块 chunk 是否可用。
   virtual RC next(Chunk &chunk) { return RC::UNIMPLEMENTED; }
+  /// @brief 关闭算子并释放运行时资源。
   virtual RC close() = 0;
 
+  /// @brief 返回最近一次 `next()` 产生的当前 tuple。
   virtual Tuple *current_tuple() { return nullptr; }
 
+  /// @brief 返回算子对外暴露的输出 schema。
   virtual RC tuple_schema(TupleSchema &schema) const { return RC::UNIMPLEMENTED; }
 
+  /// @brief 追加一个物理子算子并转移所有权。
   void add_child(unique_ptr<PhysicalOperator> oper) { children_.emplace_back(std::move(oper)); }
 
   vector<unique_ptr<PhysicalOperator>> &children() { return children_; }

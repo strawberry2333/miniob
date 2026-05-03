@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/rules.h"
 
 /**
+ * @file apply_rule_task.h
+ * @brief 规则应用任务声明。
+ */
+
+/**
  * @brief ApplyRule task
  */
 class ApplyRule : public CascadeTask

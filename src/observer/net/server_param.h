@@ -18,34 +18,40 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 
 /**
+ * @file server_param.h
+ * @brief 服务端启动参数定义。
+ */
+
+/**
  * @brief 服务端启动参数
  * @ingroup Communicator
+ * @details 统一收敛网络入口、协议选择和线程模型配置，供 NetServer/CliServer 在启动阶段读取。
  */
 class ServerParam
 {
 public:
+  /**
+   * @brief 使用默认监听地址、端口和连接数初始化参数。
+   */
   ServerParam();
 
   ServerParam(const ServerParam &other) = default;
   ~ServerParam()                        = default;
 
 public:
-  // accpet client's address, default is INADDR_ANY, means accept every address
-  long listen_addr;
+  long listen_addr;  ///< 监听地址，默认 `INADDR_ANY`，表示接受任意来源的连接。
 
-  int max_connection_num;  ///< 最大连接数
+  int max_connection_num;  ///< 监听 socket 的 backlog 上限。
 
-  int port;  ///< 监听的端口号
+  int port;  ///< TCP 监听端口号。
 
-  string unix_socket_path;  ///< unix socket的路径
+  string unix_socket_path;  ///< Unix domain socket 文件路径。
 
-  bool use_std_io = false;  ///< 是否使用标准输入输出作为通信条件
+  bool use_std_io = false;  ///< 是否使用标准输入输出而不是网络 socket。
 
-  ///< 如果使用标准输入输出作为通信条件，就不再监听端口
-  ///< 后面如果改成支持多种通讯方式，就不需要这个参数了
-  bool use_unix_socket = false;
+  bool use_unix_socket = false;  ///< 是否使用 Unix domain socket 监听。
 
-  CommunicateProtocol protocol;  ///< 通讯协议，目前支持文本协议和mysql协议
+  CommunicateProtocol protocol;  ///< 通讯协议，目前支持文本协议、CLI 和 MySQL 协议。
 
-  string thread_handling;  ///< 线程池模型
+  string thread_handling;  ///< 线程模型名，例如 `one-thread-per-connection`。
 };

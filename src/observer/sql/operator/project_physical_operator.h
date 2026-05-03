@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/expression_tuple.h"
 
 /**
+ * @file project_physical_operator.h
+ * @brief 行式投影算子。
+ */
+
+/**
  * @brief 选择/投影物理算子
  * @ingroup PhysicalOperator
  */
@@ -38,6 +43,7 @@ public:
   }
 
   RC open(Trx *trx) override;
+  /// @brief 直接向子算子请求下一行，当前算子本身不缓存结果。
   RC next() override;
   RC close() override;
 

@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/buffer/disk_buffer_pool.h"
 #include "storage/buffer/frame.h"
 
+/**
+ * @file latch_memo.cpp
+ * @brief B+ 树页面锁与 pin 生命周期收集器实现。
+ */
+
 LatchMemoItem::LatchMemoItem(LatchMemoType type, Frame *frame)
 {
   this->type  = type;

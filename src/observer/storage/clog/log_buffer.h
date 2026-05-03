@@ -26,6 +26,11 @@ See the Mulan PSL v2 for more details. */
 class LogFileWriter;
 
 /**
+ * @file log_buffer.h
+ * @brief 定义内存日志缓冲区及其刷盘接口。
+ */
+
+/**
  * @brief 日志数据缓冲区
  * @ingroup CLog
  * @details 缓存一部分日志在内存中而不是直接写入磁盘。
@@ -38,6 +43,7 @@ public:
   LogEntryBuffer()  = default;
   ~LogEntryBuffer() = default;
 
+  /// @brief 初始化起始 LSN 和最大缓冲容量。
   RC init(LSN lsn, int32_t max_bytes = 0);
 
   /**

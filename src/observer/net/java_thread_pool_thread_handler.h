@@ -19,12 +19,19 @@ See the Mulan PSL v2 for more details. */
 #include "common/thread/thread_pool_executor.h"
 #include "common/lang/mutex.h"
 
+/**
+ * @file java_thread_pool_thread_handler.h
+ * @brief 基于 libevent + 线程池 的连接处理模型。
+ */
+
 struct EventCallbackAg;
 
 /**
- * @brief 简单线程池模型。使用了模拟Java线程池接口的线程池，所以脚JavaThreadPool
+ * @brief 基于事件循环和工作线程池的连接处理模型。
  * @ingroup ThreadHandler
- * @details 使用线程池处理连接上的消息。使用libevent监听连接事件。
+ * @details 一个专门线程运行 libevent 主循环，负责探测连接上的可读事件；真正的 SQL 解析、
+ * 执行和回包放入线程池异步处理。单个连接在任意时刻最多只会有一个任务在执行，依靠“事件处理前
+ * 暂不重新注册读事件”的策略避免同一连接并发读写。
  * libevent 是一个常用并且高效的异步事件消息库，可以阅读手册了解更多。
  * [libevent 手册](https://libevent.org/doc/index.html)
  */
@@ -48,23 +55,23 @@ public:
 
 public:
   /**
-   * @brief 使用libevent处理消息时，需要有一个回调函数，这里就相当于libevent的回调函数
-   *
-   * @param ag 处理消息回调时的参数，比如libevent的event、连接等
+   * @brief 处理一次 libevent 交付的连接事件。
+   * @details 该函数本身运行在事件循环线程中，只做轻量分发，把真正耗时的 SQL 任务提交到线程池。
+   * @param ag 事件回调参数，包含 event 对象、连接对象以及回调宿主。
    */
   void handle_event(EventCallbackAg *ag);
 
   /**
-   * @brief libevent监听连接消息事件的回调函数
-   * @details 这个函数会长时间运行在线程中，并占用线程池中的一个线程
+   * @brief libevent 事件循环主体。
+   * @details 该函数会长期阻塞在 event_base 上，占据线程池中的一个工作线程直到 stop。
    */
   void event_loop_thread();
 
 private:
-  mutex                                  lock_;
-  struct event_base                     *event_base_ = nullptr;  /// libevent 的event_base
-  common::ThreadPoolExecutor             executor_;              /// 线程池
-  map<Communicator *, EventCallbackAg *> event_map_;             /// 每个连接与它关联的数据
+  mutex                                  lock_;  ///< 保护 event_map_ 的并发访问。
+  struct event_base                     *event_base_ = nullptr;  ///< libevent 的事件基座。
+  common::ThreadPoolExecutor             executor_;  ///< 同时承载事件循环线程和 SQL 工作线程。
+  map<Communicator *, EventCallbackAg *> event_map_;  ///< 连接到 libevent 回调上下文的映射。
 
-  SqlTaskHandler sql_task_handler_;  /// SQL请求处理器
+  SqlTaskHandler sql_task_handler_;  ///< SQL 请求处理器。
 };

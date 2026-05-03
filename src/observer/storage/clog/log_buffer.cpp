@@ -16,6 +16,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/clog/log_file.h"
 #include "common/lang/chrono.h"
 
+/**
+ * @file log_buffer.cpp
+ * @brief 日志内存缓冲区的追加与批量刷盘实现。
+ */
+
 using namespace common;
 
 RC LogEntryBuffer::init(LSN lsn, int32_t max_bytes /*= 0*/)
@@ -51,6 +56,7 @@ RC LogEntryBuffer::append(LSN &lsn, LogModule module, vector<char> &&data)
   }
 
   lock_guard guard(mutex_);
+  // 只有真正入队时才分配下一个 LSN，保证失败路径不会消耗日志序号。
   lsn = ++current_lsn_;
   entry.set_lsn(lsn);
 
@@ -78,7 +84,8 @@ RC LogEntryBuffer::flush(LogFileWriter &writer, int &count)
       entries_.pop_front();
       bytes_ -= entry.total_size();
     }
-    
+
+    // 出队与落盘解耦：先尽快缩短临界区，再把单条日志写入当前日志文件。
     RC rc = writer.write(entry);
     if (OB_FAIL(rc)) {
       lock_guard guard(mutex_);

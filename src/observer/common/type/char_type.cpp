@@ -13,6 +13,17 @@ See the Mulan PSL v2 for more details. */
 #include "common/type/char_type.h"
 #include "common/value.h"
 
+/**
+ * @brief CharType 的实现。
+ * @details 这里按 MiniOB 的字符串布局直接比较和转换 CHARS 类型的 Value。
+ */
+
+/**
+ * @brief 比较两个 CHARS 值。
+ * @param left 左操作数，必须是 CHARS。
+ * @param right 右操作数，必须是 CHARS。
+ * @return 标准三路比较结果。
+ */
 int CharType::compare(const Value &left, const Value &right) const
 {
   ASSERT(left.attr_type() == AttrType::CHARS && right.attr_type() == AttrType::CHARS, "invalid type");
@@ -20,12 +31,25 @@ int CharType::compare(const Value &left, const Value &right) const
       (void *)left.value_.pointer_value_, left.length_, (void *)right.value_.pointer_value_, right.length_);
 }
 
+/**
+ * @brief 从普通字符串初始化一个 CHARS Value。
+ * @param val 待写入的 Value。
+ * @param data 输入文本。
+ * @return 始终返回成功。
+ */
 RC CharType::set_value_from_str(Value &val, const string &data) const
 {
   val.set_string(data.c_str());
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 把 CHARS 转换到其它类型。
+ * @param val 源值。
+ * @param type 目标类型。
+ * @param result 转换结果。
+ * @return 当前仅保留未实现分支。
+ */
 RC CharType::cast_to(const Value &val, AttrType type, Value &result) const
 {
   switch (type) {
@@ -34,6 +58,11 @@ RC CharType::cast_to(const Value &val, AttrType type, Value &result) const
   return RC::SUCCESS;
 }
 
+/**
+ * @brief 计算 CHARS 到目标类型的隐式转换代价。
+ * @param type 目标类型。
+ * @return 相同类型为 0，其余返回不可转换。
+ */
 int CharType::cast_cost(AttrType type)
 {
   if (type == AttrType::CHARS) {
@@ -42,6 +71,12 @@ int CharType::cast_cost(AttrType type)
   return INT32_MAX;
 }
 
+/**
+ * @brief 把 CHARS Value 转回 string。
+ * @param val 源值。
+ * @param result 输出字符串。
+ * @return 成功状态码。
+ */
 RC CharType::to_string(const Value &val, string &result) const
 {
   stringstream ss;

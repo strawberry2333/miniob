@@ -10,6 +10,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/optimizer/cascade/memo.h"
 
+/**
+ * @file memo.cpp
+ * @brief memo 结构的插入与调试输出实现。
+ */
+
 GroupExpr *Memo::insert_expression(GroupExpr *gexpr, int target_group)
 {
   gexpr->set_group_id(target_group);
@@ -26,6 +31,7 @@ GroupExpr *Memo::insert_expression(GroupExpr *gexpr, int target_group)
   // create a new group if none specified
   int group_id;
   if (target_group == -1) {
+    // 未指定目标 group 时，为该表达式创建一个新的等价类。
     group_id = add_new_group(gexpr);
   } else {
     group_id = target_group;

@@ -19,7 +19,12 @@ See the Mulan PSL v2 for more details. */
 class SQLStageEvent;
 
 /**
- * @brief 描述表的执行器
+ * @file desc_table_executor.h
+ * @brief 定义 `DESC TABLE` 命令执行器。
+ */
+
+/**
+ * @brief 输出表结构信息的命令执行器。
  * @ingroup Executor
  */
 class DescTableExecutor
@@ -28,5 +33,10 @@ public:
   DescTableExecutor()          = default;
   virtual ~DescTableExecutor() = default;
 
+  /**
+   * @brief 执行 `DESC table_name`。
+   * @param sql_event 当前 SQL 请求上下文。
+   * @return 返回表结构构造结果；字段列表通过 `SqlResult` 返回给客户端。
+   */
   RC execute(SQLStageEvent *sql_event);
 };

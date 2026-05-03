@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace oceanbase;
 /**
+ * @file lsm_mvcc_trx.h
+ * @brief 定义依赖底层 ObLsm 事务能力的事务封装。
+ */
+
+/**
  * @brief lsm-tree 存储引擎对应的事务管理器
  */
 class LsmMvccTrxKit : public TrxKit

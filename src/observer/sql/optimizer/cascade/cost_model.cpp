@@ -13,6 +13,11 @@ See the Mulan PSL v2 for more details. */
 #include "catalog/catalog.h"
 #include "sql/optimizer/cascade/group_expr.h"
 
+/**
+ * @file cost_model.cpp
+ * @brief 级联优化器代价模型实现。
+ */
+
 double CostModel::calculate_cost(Memo *memo,
                                GroupExpr *gexpr)
 {
@@ -21,6 +26,7 @@ double CostModel::calculate_cost(Memo *memo,
   int arity = gexpr->get_children_groups_size();
   vector<LogicalProperty*> child_log_props;
   for (int i = 0; i < arity; ++i) {
+    // 每个子 group 的逻辑属性都由 memo 维护，当前算子只负责消费它们做局部估算。
     auto child_group_id = gexpr->get_child_group_id(i);
     auto child_gexpr = memo->get_group_by_id(child_group_id);
     child_log_props.push_back(child_gexpr->get_logical_prop());

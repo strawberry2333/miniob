@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file tuple_cell.cpp
+ * @brief `TupleCellSpec` 的构造逻辑。
+ */
+
 TupleCellSpec::TupleCellSpec(const char *table_name, const char *field_name, const char *alias)
 {
   if (table_name) {
@@ -28,6 +33,7 @@ TupleCellSpec::TupleCellSpec(const char *table_name, const char *field_name, con
   if (alias) {
     alias_ = alias;
   } else {
+    // 未显式指定别名时，优先使用 `table.field`，这样多表场景下更容易定位来源列。
     if (table_name_.empty()) {
       alias_ = field_name_;
     } else {

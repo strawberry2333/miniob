@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 
 class Memo;
 class RuleSet;
+
+/**
+ * @file optimizer_context.h
+ * @brief 级联优化器的全局上下文。
+ */
 /**
  * OptimizerContext is a class containing pointers to various objects
  * that are required during the entire query optimization process.
@@ -34,6 +39,7 @@ public:
 
   RuleSet &get_rule_set();
 
+  /// @brief 向待执行任务栈推入一个新的级联任务。
   void push_task(CascadeTask *task) { task_pool_->push(task); }
 
   CostModel *get_cost_model() { return &cost_model_; }
@@ -48,6 +54,7 @@ public:
 
   void record_operator_node_in_memo(unique_ptr<OperatorNode> &&node);
 
+  /// @brief 递归把一棵算子树包装成 `GroupExpr`。
   GroupExpr *make_group_expression(OperatorNode *node);
 
   bool record_node_into_group(OperatorNode *node, GroupExpr **gexpr) { return record_node_into_group(node, gexpr, -1); }

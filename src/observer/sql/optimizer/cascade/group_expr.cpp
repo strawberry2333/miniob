@@ -10,10 +10,16 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/optimizer/cascade/group_expr.h"
 
+/**
+ * @file group_expr.cpp
+ * @brief memo 表达式节点的哈希与调试输出实现。
+ */
+
 uint64_t GroupExpr::hash() const
 {
   auto hash = contents_->hash();
   for (const auto &child : child_groups_) {
+    // 把根节点内容和孩子 group id 一起纳入哈希，便于 memo 做结构去重。
     hash ^= std::hash<int>()(child) + 0x9e3779b9 + (hash << 6) + (hash >> 2);;
   }
   return hash;

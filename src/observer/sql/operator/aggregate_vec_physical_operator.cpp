@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file aggregate_vec_physical_operator.cpp
+ * @brief 无分组列的向量化聚合实现。
+ */
+
 AggregateVecPhysicalOperator::AggregateVecPhysicalOperator(vector<Expression *> &&expressions)
 {
   aggregate_expressions_ = std::move(expressions);
@@ -54,6 +59,7 @@ RC AggregateVecPhysicalOperator::open(Trx *trx)
   while (OB_SUCC(rc = child.next(chunk_))) {
     for (size_t aggr_idx = 0; aggr_idx < aggregate_expressions_.size(); aggr_idx++) {
       Column column;
+      // 先从输入 chunk 中取出聚合参数列，再批量更新对应状态对象。
       value_expressions_[aggr_idx]->get_column(chunk_, column);
       ASSERT(aggregate_expressions_[aggr_idx]->type() == ExprType::AGGREGATION, "expect aggregate expression");
       auto *aggregate_expr = static_cast<AggregateExpr *>(aggregate_expressions_[aggr_idx]);

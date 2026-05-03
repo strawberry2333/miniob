@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file expression.cpp
+ * @brief 表达式求值、向量化求值与常量折叠实现。
+ */
+
 RC FieldExpr::get_value(const Tuple &tuple, Value &value) const
 {
   return tuple.find_cell(TupleCellSpec(table_name(), field_name()), value);
@@ -40,8 +45,10 @@ bool FieldExpr::equal(const Expression &other) const
 RC FieldExpr::get_column(Chunk &chunk, Column &column)
 {
   if (pos_ != -1) {
+    // 聚合/投影下推等场景中，上游已经算好该表达式，直接引用结果列即可。
     column.reference(chunk.column(pos_));
   } else {
+    // 常规路径下退回到字段在原始 chunk 中的物理列号。
     column.reference(chunk.column(field().meta()->field_id()));
   }
   return RC::SUCCESS;
@@ -110,6 +117,7 @@ RC CastExpr::get_column(Chunk &chunk, Column &column)
   for (int i = 0; i < child_column.count(); ++i) {
     Value value = child_column.get_value(i);
     Value cast_value;
+    // 列式路径没有专门的批量 cast 实现，这里按元素逐个转换。
     rc = cast(value, cast_value);
     if (rc != RC::SUCCESS) {
       return rc;
@@ -253,6 +261,7 @@ RC ComparisonExpr::eval(Chunk &chunk, vector<uint8_t> &select)
       Value left_val = left_column.get_value(i);
       Value right_val = right_column.get_value(i);
       bool        result   = false;
+      // 字符串列当前走标量比较路径，避免为可变长数据维护额外 SIMD 实现。
       rc                   = compare_value(left_val, right_val, result);
       if (rc != RC::SUCCESS) {
         LOG_WARN("failed to compare tuple cells. rc=%s", strrc(rc));
@@ -275,6 +284,7 @@ RC ComparisonExpr::compare_column(const Column &left, const Column &right, vecto
 
   bool left_const  = left.column_type() == Column::Type::CONSTANT_COLUMN;
   bool right_const = right.column_type() == Column::Type::CONSTANT_COLUMN;
+  // 常量列与普通列的组合会影响访存模式，因此在这里一次性完成模板分派。
   if (left_const && right_const) {
     compare_result<T, true, true>((T *)left.data(), (T *)right.data(), left.count(), result, comp_);
   } else if (left_const && !right_const) {
@@ -296,6 +306,7 @@ RC ConjunctionExpr::get_value(const Tuple &tuple, Value &value) const
 {
   RC rc = RC::SUCCESS;
   if (children_.empty()) {
+    // 空的 AND 视为真，空的 OR 也会在下面落到默认值逻辑中。
     value.set_boolean(true);
     return rc;
   }
@@ -308,6 +319,7 @@ RC ConjunctionExpr::get_value(const Tuple &tuple, Value &value) const
       return rc;
     }
     bool bool_value = tmp_value.get_boolean();
+    // AND / OR 都在这里做短路，避免不必要的子表达式求值。
     if ((conjunction_type_ == Type::AND && !bool_value) || (conjunction_type_ == Type::OR && bool_value)) {
       value.set_boolean(bool_value);
       return rc;
@@ -346,6 +358,7 @@ AttrType ArithmeticExpr::value_type() const
     return left_->value_type();
   }
 
+  // 整数除法会提升为浮点，其他纯整数算术则保持整数结果。
   if ((left_->value_type() == AttrType::INTS) &&
    (right_->value_type() == AttrType::INTS) &&
       arithmetic_type_ != Type::DIV) {
@@ -396,6 +409,7 @@ RC ArithmeticExpr::execute_calc(
     const Column &left, const Column &right, Column &result, Type type, AttrType attr_type) const
 {
   RC rc = RC::SUCCESS;
+  // 这里不区分逻辑表达式种类，只按算术类型和物理数据类型派发到底层模板算子。
   switch (type) {
     case Type::ADD: {
       if (attr_type == AttrType::INTS) {
@@ -483,6 +497,7 @@ RC ArithmeticExpr::get_column(Chunk &chunk, Column &column)
 {
   RC rc = RC::SUCCESS;
   if (pos_ != -1) {
+    // 例如 group by 输出列中的聚合结果，已经由上游 chunk 预先计算完成。
     column.reference(chunk.column(pos_));
     return rc;
   }
@@ -510,6 +525,7 @@ RC ArithmeticExpr::calc_column(const Column &left_column, const Column &right_co
   column.init(target_type, left_column.attr_len(), max(left_column.count(), right_column.count()));
   bool left_const  = left_column.column_type() == Column::Type::CONSTANT_COLUMN;
   bool right_const = right_column.column_type() == Column::Type::CONSTANT_COLUMN;
+  // 结果列是否仍可视为常量列，取决于左右输入是否都为常量。
   if (left_const && right_const) {
     column.set_column_type(Column::Type::CONSTANT_COLUMN);
     rc = execute_calc<true, true>(left_column, right_column, column, arithmetic_type_, target_type);
@@ -570,6 +586,7 @@ RC AggregateExpr::get_column(Chunk &chunk, Column &column)
 {
   RC rc = RC::SUCCESS;
   if (pos_ != -1) {
+    // group by / aggregate 算子会在输出 chunk 中固定聚合列位置，后续表达式直接引用。
     column.reference(chunk.column(pos_));
   } else {
     rc = RC::INTERNAL;
@@ -594,6 +611,7 @@ unique_ptr<Aggregator> AggregateExpr::create_aggregator() const
   unique_ptr<Aggregator> aggregator;
   switch (aggregate_type_) {
     case Type::SUM: {
+      // 当前行式聚合仅实现了 `SUM`，其余类型由向量化状态对象承担。
       aggregator = make_unique<SumAggregator>();
       break;
     }

@@ -13,6 +13,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/physical_operator.h"
 
 /**
+ * @file aggregate_vec_physical_operator.h
+ * @brief 无分组列时的向量化聚合算子。
+ */
+
+/**
  * @brief 聚合物理算子 (Vectorized)
  * @ingroup PhysicalOperator
  */
@@ -26,6 +31,7 @@ public:
   PhysicalOperatorType type() const override { return PhysicalOperatorType::AGGREGATE_VEC; }
 
   RC open(Trx *trx) override;
+  /// @brief 该算子只会产出一个包含聚合结果的 chunk。
   RC next(Chunk &chunk) override;
   RC close() override;
 
@@ -39,6 +45,7 @@ private:
   public:
     AggregateValues() = default;
 
+    /// @brief 保存一个聚合状态对象的裸指针。
     void insert(void *aggr_value) { data_.push_back(aggr_value); }
 
     void *at(size_t index)

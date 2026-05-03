@@ -44,6 +44,11 @@ class LogHandler;
 class BufferPoolLogHandler;
 
 /**
+ * @file disk_buffer_pool.h
+ * @brief 定义页式缓冲池、页帧管理器与文件级页面分配接口。
+ */
+
+/**
  * @brief BufferPool 的实现
  * @defgroup BufferPool
  */
@@ -90,7 +95,9 @@ class BPFrameManager
 public:
   BPFrameManager(const char *tag);
 
+  /// @brief 初始化页帧缓存和分配器容量上限。
   RC init(int pool_num);
+  /// @brief 释放所有页帧管理资源；调用方需先确保页已刷盘且不再被引用。
   RC cleanup();
 
   /**
@@ -170,9 +177,11 @@ public:
   BufferPoolIterator();
   ~BufferPoolIterator();
 
+  /// @brief 绑定一个 buffer pool 并从指定页号开始遍历已分配页。
   RC      init(DiskBufferPool &bp, PageNum start_page = 0);
   bool    has_next();
   PageNum next();
+  /// @brief 重新从当前 bitmap 状态起点开始遍历。
   RC      reset();
 
 private:
@@ -195,11 +204,13 @@ public:
 
   /**
    * 根据文件名打开一个分页文件
+   * @details 打开后会把 header page 映射入内存，并恢复文件级元数据状态。
    */
   RC open_file(const char *file_name);
 
   /**
    * 关闭分页文件
+   * @details 关闭前会尝试刷出脏页、回收与该文件相关的 frame，并释放 double write buffer 中的残留页。
    */
   RC close_file();
 

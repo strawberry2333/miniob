@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/trx/mvcc_trx_log.h"
 #include "common/lang/algorithm.h"
 
+/**
+ * @file mvcc_trx.cpp
+ * @brief 基于 begin/end xid 隐藏列的 MVCC 事务实现。
+ */
+
 MvccTrxKit::~MvccTrxKit()
 {
   vector<Trx *> tmp_trxes;
@@ -30,7 +35,7 @@ MvccTrxKit::~MvccTrxKit()
 
 RC MvccTrxKit::init()
 {
-  // 事务使用一些特殊的字段，放到每行记录中，表示行记录的可见性。
+  // 每条记录都追加两列隐藏字段，用来描述版本可见性区间和删除状态。
   fields_ = vector<FieldMeta>{
       // field_id in trx fields is invisible.
       FieldMeta("__trx_xid_begin", AttrType::INTS, 0 /*attr_offset*/, 4 /*attr_len*/, false /*visible*/, -1/*field_id*/),
@@ -50,6 +55,7 @@ Trx *MvccTrxKit::create_trx(LogHandler &log_handler)
 {
   Trx *trx = new MvccTrx(*this, log_handler);
   if (trx != nullptr) {
+    // 活动事务集合用于恢复后的清理和调试观测，因此创建后立即纳管。
     lock_.lock();
     trxes_.push_back(trx);
     lock_.unlock();
@@ -117,6 +123,7 @@ RC MvccTrx::insert_record(Table *table, Record &record)
   Field end_field;
   trx_fields(table, begin_field, end_field);
 
+  // 新插入版本对当前事务可见、对其它事务不可见，因此 begin_xid 先写成负的事务号。
   begin_field.set_int(record, -trx_id_);
   end_field.set_int(record, trx_kit_.max_trx_id());
 
@@ -130,6 +137,7 @@ RC MvccTrx::insert_record(Table *table, Record &record)
   ASSERT(rc == RC::SUCCESS, "failed to append insert record log. trx id=%d, table id=%d, rid=%s, record len=%d, rc=%s",
          trx_id_, table->table_id(), record.rid().to_string().c_str(), record.len(), strrc(rc));
 
+  // 记录逻辑操作集合，供回滚时按相反语义撤销。
   operations_.push_back(Operation(Operation::Type::INSERT, table, record.rid()));
   return rc;
 }
@@ -149,6 +157,7 @@ RC MvccTrx::delete_record(Table *table, Record &record)
       return false;
     }
 
+    // 删除中的版本用负 end_xid 标记，表示其它事务暂时不可再修改它。
     end_field.set_int(inplace_record, -trx_id_);
     return true;
   });
@@ -183,6 +192,7 @@ RC MvccTrx::visit_record(Table *table, Record &record, ReadWriteMode mode)
 
   RC rc = RC::SUCCESS;
   if (begin_xid > 0 && end_xid > 0) {
+    // 正常已提交版本：只有 commit 区间覆盖当前事务 ID 时才可见。
     if (trx_id_ >= begin_xid && trx_id_ <= end_xid) {
       rc = RC::SUCCESS;
     } else {
@@ -190,7 +200,7 @@ RC MvccTrx::visit_record(Table *table, Record &record, ReadWriteMode mode)
       rc = RC::RECORD_INVISIBLE;
     }
   } else if (begin_xid < 0) {
-    // begin xid 小于0说明是刚插入而且没有提交的数据
+    // begin_xid < 0 表示某事务刚插入但尚未提交。
     if (-begin_xid == trx_id_) {
       rc = RC::SUCCESS;
     } else {
@@ -199,7 +209,7 @@ RC MvccTrx::visit_record(Table *table, Record &record, ReadWriteMode mode)
       rc = RC::RECORD_INVISIBLE;
     }
   } else if (end_xid < 0) {
-    // end xid 小于0 说明是正在删除但是还没有提交的数据
+    // end_xid < 0 表示某事务正在删除这条记录但还没提交。
     if (mode == ReadWriteMode::READ_ONLY) {
       // 如果 -end_xid 就是当前事务的事务号，说明是当前事务删除的
       if (-end_xid != trx_id_) {
@@ -250,6 +260,7 @@ RC MvccTrx::start_if_need()
 {
   if (!started_) {
     ASSERT(operations_.empty(), "try to start a new trx while operations is not empty");
+    // 真正第一次执行写操作时才分配事务 ID，减少空事务开销。
     trx_id_ = trx_kit_.next_trx_id();
     LOG_DEBUG("current thread change to new trx with %d", trx_id_);
     started_ = true;

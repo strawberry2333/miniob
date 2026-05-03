@@ -21,6 +21,11 @@ class SessionEvent;
 class SelectStmt;
 
 /**
+ * @file execute_stage.h
+ * @brief 定义 SQL 流水线中的执行阶段。
+ */
+
+/**
  * @brief 执行SQL语句的Stage，包括DML和DDL
  * @ingroup SQLStage
  * @details 根据前面阶段生成的结果，有些语句会生成执行计划，有些不会。
@@ -29,6 +34,17 @@ class SelectStmt;
 class ExecuteStage
 {
 public:
+  /**
+   * @brief 执行当前 SQL 请求。
+   * @param event 当前 SQL 请求上下文。
+   * @return 返回执行阶段状态；若生成物理算子则把算子挂到 `SqlResult` 上。
+   */
   RC handle_request(SQLStageEvent *event);
+
+  /**
+   * @brief 接管已经生成好的物理算子树。
+   * @param sql_event 当前 SQL 请求上下文。
+   * @return 返回算子转移结果。
+   */
   RC handle_request_with_physical_operator(SQLStageEvent *sql_event);
 };

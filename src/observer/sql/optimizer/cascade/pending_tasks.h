@@ -15,11 +15,17 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/tasks/cascade_task.h"
 
 /**
+ * @file pending_tasks.h
+ * @brief 级联优化器待执行任务栈。
+ */
+
+/**
  * @brief This collection of undone cascade tasks is currently stored as a stack.
  */
 class PendingTasks
 {
 public:
+  /// @brief 弹出下一个待执行任务，当前实现采用后进先出策略。
   CascadeTask *pop()
   {
     auto task = task_stack_.top();

@@ -20,6 +20,11 @@ See the Mulan PSL v2 for more details. */
 #include "session/session.h"
 #include "sql/expr/tuple.h"
 
+/**
+ * @file plain_communicator.cpp
+ * @brief 简单 `'\0'` 文本协议的读写实现。
+ */
+
 PlainCommunicator::PlainCommunicator()
 {
   send_message_delimiter_.assign(1, '\0');
@@ -40,11 +45,13 @@ RC PlainCommunicator::read_event(SessionEvent *&event)
   const int    max_packet_size = 8192;
   vector<char> buf(max_packet_size);
 
-  // 持续接收消息，直到遇到'\0'。将'\0'遇到的后续数据直接丢弃没有处理，因为目前仅支持一收一发的模式
+  // 持续接收消息直到遇到 '\0'。当前协议一次只处理一条请求，因此 terminator 之后的字节不会
+  // 被继续缓存留给下一次 read_event。
   while (true) {
     read_len = ::read(fd_, buf.data() + data_len, max_packet_size - data_len);
     if (read_len < 0) {
       if (errno == EAGAIN) {
+        // 非阻塞连接暂时无数据时继续等待；线程模型已经保证不会并发读取同一连接。
         continue;
       }
       break;
@@ -61,6 +68,7 @@ RC PlainCommunicator::read_event(SessionEvent *&event)
     bool msg_end = false;
     for (int i = 0; i < read_len; i++) {
       if (buf[data_len + i] == 0) {
+        // 保留 '\0' 便于后续直接按 C 字符串构造 SQL 文本。
         data_len += i + 1;
         msg_end = true;
         break;
@@ -105,6 +113,7 @@ RC PlainCommunicator::write_state(SessionEvent *event, bool &need_disconnect)
     snprintf(buf, buf_size, "%s > %s\n", strrc(sql_result->return_code()), state_string.c_str());
   }
 
+  // 无结果集语句只回一行状态文本，客户端据此判断执行是否成功。
   RC rc = writer_->writen(buf, strlen(buf));
   if (OB_FAIL(rc)) {
     LOG_WARN("failed to send data to client. err=%s", strerror(errno));
@@ -129,6 +138,7 @@ RC PlainCommunicator::write_debug(SessionEvent *request, bool &need_disconnect)
 
   const list<string> &debug_infos = sql_debug.get_debug_infos();
   for (auto &debug_info : debug_infos) {
+    // 调试信息和查询结果共用一条写通道，先输出固定前缀方便客户端区分。
     RC rc = writer_->writen(debug_message_prefix_.data(), debug_message_prefix_.size());
     if (OB_FAIL(rc)) {
       LOG_WARN("failed to send data to client. err=%s", strerror(errno));
@@ -161,12 +171,14 @@ RC PlainCommunicator::write_result(SessionEvent *event, bool &need_disconnect)
 {
   RC rc = write_result_internal(event, need_disconnect);
   if (!need_disconnect) {
+    // 先写正文，再追加调试信息，避免影响客户端对结果集主体的解析。
     RC rc1 = write_debug(event, need_disconnect);
     if (OB_FAIL(rc1)) {
       LOG_WARN("failed to send debug info to client. rc=%s, err=%s", strrc(rc), strerror(errno));
     }
   }
   if (!need_disconnect) {
+    // 最后补协议分隔符，通知客户端这次响应已经完整结束。
     rc = writer_->writen(send_message_delimiter_.data(), send_message_delimiter_.size());
     if (OB_FAIL(rc)) {
       LOG_ERROR("Failed to send data back to client. ret=%s, error=%s", strrc(rc), strerror(errno));
@@ -187,6 +199,7 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
   SqlResult *sql_result = event->sql_result();
 
   if (RC::SUCCESS != sql_result->return_code() || !sql_result->has_operator()) {
+    // 执行失败或没有结果算子时，直接走状态回包路径。
     return write_state(event, need_disconnect);
   }
 
@@ -204,6 +217,7 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
     const TupleCellSpec &spec  = schema.cell_at(i);
     const char          *alias = spec.alias();
     if (nullptr != alias || alias[0] != 0) {
+      // 文本协议先输出表头，再逐行输出数据，便于人类直接阅读。
       if (0 != i) {
         const char *delim = " | ";
 
@@ -239,6 +253,7 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
   rc = RC::SUCCESS;
   if (event->session()->get_execution_mode() == ExecutionMode::CHUNK_ITERATOR
       && event->session()->used_chunk_mode()) {
+    // Chunk 模式按批次消费结果，减少频繁的 next_tuple 调用。
     rc = write_chunk_result(sql_result);
   } else {
     rc = write_tuple_result(sql_result);
@@ -298,7 +313,7 @@ RC PlainCommunicator::write_tuple_result(SqlResult *sql_result)
         return rc;
       }
 
-      string cell_str = value.to_string();
+      string cell_str = value.to_string();  // 文本协议统一将值序列化成字符串。
 
       rc = writer_->writen(cell_str.data(), cell_str.size());
       if (OB_FAIL(rc)) {
@@ -331,6 +346,7 @@ RC PlainCommunicator::write_chunk_result(SqlResult *sql_result)
   while (RC::SUCCESS == (rc = sql_result->next_chunk(chunk))) {
     int col_num = chunk.column_num();
     for (int row_idx = 0; row_idx < chunk.rows(); row_idx++) {
+      // Chunk 内部通常按列组织，这里重新按“行”拼成文本输出格式。
       for (int col_idx = 0; col_idx < col_num; col_idx++) {
         if (col_idx != 0) {
           const char *delim = " | ";

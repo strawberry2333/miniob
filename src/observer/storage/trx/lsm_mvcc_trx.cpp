@@ -10,6 +10,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "storage/trx/lsm_mvcc_trx.h"
 
+/**
+ * @file lsm_mvcc_trx.cpp
+ * @brief 基于底层 ObLsm 事务能力的适配实现。
+ */
+
 RC LsmMvccTrxKit::init() { return RC::SUCCESS; }
 
 const vector<FieldMeta> *LsmMvccTrxKit::trx_fields() const { return nullptr; }
@@ -22,7 +27,7 @@ void LsmMvccTrxKit::destroy_trx(Trx *trx) { delete trx; }
 
 void LsmMvccTrxKit::all_trxes(vector<Trx *> &trxes) { return; }
 
-/** oblsm 自身的日志回放是足够的，这里其实是空实现 */
+/** oblsm 自身的日志回放已经覆盖数据恢复，这里只返回一个空 replayer 占位。 */
 LogReplayer *LsmMvccTrxKit::create_log_replayer(Db &, LogHandler &) { return new LsmMvccTrxLogReplayer; }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -51,6 +56,7 @@ RC LsmMvccTrx::start_if_need()
   if (trx_ != nullptr) {
     return RC::SUCCESS;
   }
+  // 惰性创建底层事务对象，避免只读路径或未执行写操作时的额外开销。
   trx_ = lsm_->begin_transaction();
   return RC::SUCCESS;
 }
@@ -68,7 +74,5 @@ RC LsmMvccTrx::rollback()
   return trx_->rollback();
 }
 
-/**
- * 实际没有使用
- */
+/** 当前恢复依赖 ObLsm 自身 WAL，这里的 redo 保持空实现。 */
 RC LsmMvccTrx::redo(Db *, const LogEntry &) { return RC::SUCCESS; }

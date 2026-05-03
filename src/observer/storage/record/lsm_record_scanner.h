@@ -17,6 +17,15 @@ See the Mulan PSL v2 for more details. */
 #include "storage/trx/trx.h"
 
 using namespace oceanbase;
+/**
+ * @file lsm_record_scanner.h
+ * @brief 定义基于 ObLsm 迭代器的记录扫描器。
+ */
+
+/**
+ * @brief LSM 表记录扫描器。
+ * @details 通过编码后的表前缀定位到当前表的数据范围，并把底层 value 拷贝回 `Record`。
+ */
 class LsmRecordScanner : public RecordScanner
 {
 public:

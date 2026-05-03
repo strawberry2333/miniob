@@ -21,6 +21,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/clog/log_entry.h"
 #include "common/io/io.h"
 
+/**
+ * @file log_file.cpp
+ * @brief 日志文件读写与目录切分管理实现。
+ */
+
 using namespace common;
 
 RC LogFileReader::open(const char *filename)
@@ -72,6 +77,7 @@ RC LogFileReader::iterate(function<RC(LogEntry &)> callback, LSN start_lsn /*=0*
       return RC::IOERR_READ;
     }
 
+    // 先读固定头，再按 payload 大小精确读取正文，避免一次性映射整文件。
     vector<char> data(header.size);
     ret = readn(fd_, data.data(), header.size);
     if (0 != ret) {
@@ -94,6 +100,7 @@ RC LogFileReader::iterate(function<RC(LogEntry &)> callback, LSN start_lsn /*=0*
 
 RC LogFileReader::skip_to(LSN start_lsn)
 {
+  // 通过顺序扫描定位到第一条不小于 start_lsn 的日志，便于恢复和增量回放复用同一逻辑。
   if (fd_ < 0) {
     return RC::FILE_NOT_OPENED;
   }

@@ -10,6 +10,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "storage/record/lob_handler.h"
 
+/**
+ * @file lob_handler.cpp
+ * @brief LOB 文件顺序追加与打开实现。
+ */
+
 RC LobFileHandler::create_file(const char *file_name)
 {
   return file_.create_file(file_name);
@@ -19,6 +24,7 @@ RC LobFileHandler::open_file(const char *file_name)
 {
   std::ifstream file(file_name);
   if (file.good()) {
+    // 先用 ifstream 探测存在性，避免 PersistHandler 把“不存在”和“打开失败”混成同一错误码。
     return file_.open_file(file_name);
   } else {
     return RC::FILE_NOT_EXIST;
@@ -36,6 +42,7 @@ RC LobFileHandler::insert_data(int64_t &offset, int64_t length, const char *data
     return rc;
   }
   if (out_size != length) {
+    // LOB 写入必须整块成功，否则 offset 已暴露给上层会导致后续读取到截断数据。
     return RC::IOERR_WRITE;
   }
   offset = end_offset;

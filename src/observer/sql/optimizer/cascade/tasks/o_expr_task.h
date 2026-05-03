@@ -13,6 +13,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/tasks/cascade_task.h"
 
 /**
+ * @file o_expr_task.h
+ * @brief 表达式级优化任务声明。
+ */
+
+/**
  * OptimizeExpression
  */
 class OptimizeExpression : public CascadeTask

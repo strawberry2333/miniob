@@ -12,6 +12,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/optimizer/cascade/property.h"
 
+/**
+ * @file property_set.h
+ * @brief 级联优化器属性集合占位定义。
+ */
+
 class PropertySet;
 struct PropSetPtrHash
 {
@@ -39,5 +44,6 @@ public:
   ~PropertySet() = default;
 
 private:
+  /// @brief 预留承载排序、分布等物理属性的集合。
   std::vector<Property *> properties_;
 };

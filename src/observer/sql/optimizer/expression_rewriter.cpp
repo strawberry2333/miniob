@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file expression_rewriter.cpp
+ * @brief 表达式级规则改写实现。
+ */
+
 ExpressionRewriter::ExpressionRewriter()
 {
   expr_rewrite_rules_.emplace_back(new ComparisonSimplificationRule);
@@ -33,6 +38,7 @@ RC ExpressionRewriter::rewrite(unique_ptr<LogicalOperator> &oper, bool &change_m
 
   vector<unique_ptr<Expression>> &expressions = oper->expressions();
   for (unique_ptr<Expression> &expr : expressions) {
+    // 当前算子挂载的每个表达式都独立递归处理，避免规则间互相覆盖状态。
     rc = rewrite_expression(expr, sub_change_made);
     if (rc != RC::SUCCESS) {
       break;
@@ -79,6 +85,7 @@ RC ExpressionRewriter::rewrite_expression(unique_ptr<Expression> &expr, bool &ch
   }
 
   if (change_made || rc != RC::SUCCESS) {
+    // 当前节点已被替换或报错时，不再继续向下访问旧子树。
     return rc;
   }
 

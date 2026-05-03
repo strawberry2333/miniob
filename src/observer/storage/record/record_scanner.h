@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/common/condition_filter.h"
 
 /**
+ * @file record_scanner.h
+ * @brief 定义全表记录扫描器统一接口。
+ */
+
+/**
  * @brief 遍历某个表中所有记录
  * @ingroup RecordManager
  */

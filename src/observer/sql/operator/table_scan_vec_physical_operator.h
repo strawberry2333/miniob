@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 class Table;
 
 /**
+ * @file table_scan_vec_physical_operator.h
+ * @brief 向量化全表扫描算子。
+ */
+
+/**
  * @brief 表扫描物理算子(vectorized)
  * @ingroup PhysicalOperator
  */
@@ -33,12 +38,14 @@ public:
   PhysicalOperatorType type() const override { return PhysicalOperatorType::TABLE_SCAN_VEC; }
 
   RC open(Trx *trx) override;
+  /// @brief 扫描一块原始列并按选择向量过滤出满足条件的行。
   RC next(Chunk &chunk) override;
   RC close() override;
 
   void set_predicates(vector<unique_ptr<Expression>> &&exprs);
 
 private:
+  /// @brief 依次执行所有下推谓词，原地收窄 `select_` 选择向量。
   RC filter(Chunk &chunk);
 
 private:

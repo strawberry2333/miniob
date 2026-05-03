@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file explain_physical_operator.cpp
+ * @brief `EXPLAIN` 算子的实现。
+ */
+
 RC ExplainPhysicalOperator::open(Trx *)
 {
   ASSERT(children_.size() == 1, "explain must has 1 child");
@@ -29,6 +34,7 @@ RC ExplainPhysicalOperator::close() { return RC::SUCCESS; }
 void ExplainPhysicalOperator::generate_physical_plan()
 {
   ASSERT(children_.size() == 1, "explain must has 1 child");
+  // 计划文本在首次 `next` 时一次性生成，后续重复拉取直接 EOF。
   physical_plan_ = OptimizerUtils::dump_physical_plan(children_.front());
 }
 
@@ -61,4 +67,3 @@ RC ExplainPhysicalOperator::next(Chunk &chunk)
 }
 
 Tuple *ExplainPhysicalOperator::current_tuple() { return &tuple_; }
-

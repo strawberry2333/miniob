@@ -28,22 +28,33 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
-// Destructor
+/**
+ * @brief SessionStage 的实现文件。
+ * @details 这里负责建立会话上下文、串行调用 SQL 各处理阶段，并在末尾统一回写结果。
+ */
+
+/// @brief 默认析构，不包含额外资源释放逻辑。
 SessionStage::~SessionStage() {}
 
-// TODO remove me
+/**
+ * @brief 以同步方式处理一个完整的客户端请求。
+ * @param sev 当前请求事件。
+ */
 void SessionStage::handle_request(SessionEvent *sev)
 {
   string sql = sev->query();
   if (common::is_blank(sql.c_str())) {
+    // 空白语句无需进入 SQL 处理流水线。
     return;
   }
 
+  // 先把当前会话与请求绑定到线程上下文，方便后续阶段按需读取。
   Session::set_current_session(sev->session());
   sev->session()->set_current_request(sev);
   SQLStageEvent sql_event(sev, sql);
   (void)handle_sql(&sql_event);
 
+  // SQL 处理完成后统一交给 communicator 选择协议格式并回写结果。
   Communicator *communicator    = sev->get_communicator();
   bool          need_disconnect = false;
   RC            rc              = communicator->write_result(sev, need_disconnect);
@@ -55,6 +66,10 @@ void SessionStage::handle_request(SessionEvent *sev)
   Session::set_current_session(nullptr);
 }
 
+/**
+ * @brief 预留的请求入口，只完成基础上下文准备。
+ * @param event 当前请求事件。
+ */
 void SessionStage::handle_request2(SessionEvent *event)
 {
   const string &sql = event->query();
@@ -64,6 +79,7 @@ void SessionStage::handle_request2(SessionEvent *event)
 
   Session::set_current_session(event->session());
   event->session()->set_current_request(event);
+  // 统一构造 SQLStageEvent，为将来切换异步调度保留统一入口。
   SQLStageEvent sql_event(event, sql);
 }
 
@@ -79,30 +95,35 @@ void SessionStage::handle_request2(SessionEvent *event)
  */
 RC SessionStage::handle_sql(SQLStageEvent *sql_event)
 {
+  // 先尝试命中查询缓存，命中失败或无需缓存时再进入真正的 SQL 流水线。
   RC rc = query_cache_stage_.handle_request(sql_event);
   if (OB_FAIL(rc)) {
     LOG_TRACE("failed to do query cache. rc=%s", strrc(rc));
     return rc;
   }
 
+  // parse 阶段把 SQL 文本翻译成语法树。
   rc = parse_stage_.handle_request(sql_event);
   if (OB_FAIL(rc)) {
     LOG_TRACE("failed to do parse. rc=%s", strrc(rc));
     return rc;
   }
 
+  // resolve 阶段把语法树绑定到真实 schema，生成可执行的 Stmt。
   rc = resolve_stage_.handle_request(sql_event);
   if (OB_FAIL(rc)) {
     LOG_TRACE("failed to do resolve. rc=%s", strrc(rc));
     return rc;
   }
 
+  // optimize 阶段允许返回 UNIMPLEMENTED，表示当前语句无需专门优化。
   rc = optimize_stage_.handle_request(sql_event);
   if (rc != RC::UNIMPLEMENTED && rc != RC::SUCCESS) {
     LOG_TRACE("failed to do optimize. rc=%s", strrc(rc));
     return rc;
   }
 
+  // execute 阶段负责真正执行物理计划，并把结果写入 SessionEvent::sql_result()。
   rc = execute_stage_.handle_request(sql_event);
   if (OB_FAIL(rc)) {
     LOG_TRACE("failed to do execute. rc=%s", strrc(rc));

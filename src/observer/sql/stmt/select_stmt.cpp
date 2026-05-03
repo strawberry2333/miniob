@@ -23,8 +23,14 @@ See the Mulan PSL v2 for more details. */
 using namespace std;
 using namespace common;
 
+/**
+ * @file select_stmt.cpp
+ * @brief 实现 `SELECT` 的表绑定、表达式绑定和过滤条件构造。
+ */
+
 SelectStmt::~SelectStmt()
 {
+  // FilterStmt 由 SelectStmt 独占持有，析构时统一释放。
   if (nullptr != filter_stmt_) {
     delete filter_stmt_;
     filter_stmt_ = nullptr;
@@ -38,6 +44,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
     return RC::INVALID_ARGUMENT;
   }
 
+  // 绑定上下文负责记录本次查询 `FROM` 子句中可见的表。
   BinderContext binder_context;
 
   // collect tables in `from` statement
@@ -50,6 +57,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
       return RC::INVALID_ARGUMENT;
     }
 
+    // 第 1 步：把 FROM 子句中的表名解析到具体 Table 对象。
     Table *table = db->find_table(table_name);
     if (nullptr == table) {
       LOG_WARN("no such table. db=%s, table_name=%s", db->name(), table_name);
@@ -65,6 +73,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
   vector<unique_ptr<Expression>> bound_expressions;
   ExpressionBinder expression_binder(binder_context);
   
+  // 第 2 步：绑定 SELECT 列表中的表达式。
   for (unique_ptr<Expression> &expression : select_sql.expressions) {
     RC rc = expression_binder.bind_expression(expression, bound_expressions);
     if (OB_FAIL(rc)) {
@@ -74,6 +83,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
   }
 
   vector<unique_ptr<Expression>> group_by_expressions;
+  // 第 3 步：绑定 GROUP BY 表达式，沿用同一套表可见性上下文。
   for (unique_ptr<Expression> &expression : select_sql.group_by) {
     RC rc = expression_binder.bind_expression(expression, group_by_expressions);
     if (OB_FAIL(rc)) {
@@ -88,6 +98,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
   }
 
   // create filter statement in `where` statement
+  // 第 4 步：把 parse 阶段的 where 条件绑定成 FilterStmt。
   FilterStmt *filter_stmt = nullptr;
   RC          rc          = FilterStmt::create(db,
       default_table,
@@ -101,6 +112,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
   }
 
   // everything alright
+  // 第 5 步：组装最终 SelectStmt，把中间容器所有权都转交进去。
   SelectStmt *select_stmt = new SelectStmt();
 
   select_stmt->tables_.swap(tables);

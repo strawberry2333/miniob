@@ -19,7 +19,12 @@ See the Mulan PSL v2 for more details. */
 class SQLStageEvent;
 
 /**
- * @brief 创建表的执行器
+ * @file create_table_executor.h
+ * @brief 定义 `CREATE TABLE` 命令执行器。
+ */
+
+/**
+ * @brief 创建表的命令执行器。
  * @ingroup Executor
  */
 class CreateTableExecutor
@@ -28,5 +33,10 @@ public:
   CreateTableExecutor()          = default;
   virtual ~CreateTableExecutor() = default;
 
+  /**
+   * @brief 执行 `CREATE TABLE`。
+   * @param sql_event 当前 SQL 请求上下文。
+   * @return 返回底层建表接口的执行结果。
+   */
   RC execute(SQLStageEvent *sql_event);
 };

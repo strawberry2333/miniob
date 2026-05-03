@@ -20,14 +20,18 @@ See the Mulan PSL v2 for more details. */
 class Db;
 
 /**
+ * @file stmt.h
+ * @brief 定义 resolve 阶段输出的统一 `Stmt` 抽象。
+ */
+
+/**
  * @brief Statement SQL语句解析后通过Resolver转换成Stmt
  * @defgroup Statement
- * @file stmt.h
  */
 
 /**
  * @brief Statement的类型
- *
+ * @details 这里的枚举用于后续 optimizer / executor 的统一分发。
  */
 #define DEFINE_ENUM()             \
   DEFINE_ENUM_ITEM(CALC)          \
@@ -71,6 +75,11 @@ inline const char *stmt_type_name(StmtType type)
   }
 }
 
+/**
+ * @brief 判断语句类型是否属于 DDL。
+ * @param type `StmtType` 枚举值。
+ * @return 若该类型会修改 schema，则返回 `true`。
+ */
 bool stmt_type_ddl(StmtType type);
 
 /**
@@ -85,10 +94,18 @@ public:
   Stmt()          = default;
   virtual ~Stmt() = default;
 
+  /**
+   * @brief 返回当前语句对象的静态类型。
+   */
   virtual StmtType type() const = 0;
 
 public:
+  /**
+   * @brief 把 parse 阶段的 `ParsedSqlNode` 转换成具体 `Stmt` 子类。
+   * @param db 当前数据库，用于表/字段等 schema 绑定。
+   * @param sql_node parse 阶段生成的语法节点。
+   * @param stmt 输出 `Stmt` 指针，由调用方接管。
+   * @return 返回绑定结果；未实现语句返回 `RC::UNIMPLEMENTED`。
+   */
   static RC create_stmt(Db *db, ParsedSqlNode &sql_node, Stmt *&stmt);
-
-private:
 };

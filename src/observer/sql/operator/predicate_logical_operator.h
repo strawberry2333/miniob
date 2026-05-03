@@ -18,12 +18,18 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/logical_operator.h"
 
 /**
+ * @file predicate_logical_operator.h
+ * @brief 逻辑谓词节点。
+ */
+
+/**
  * @brief 谓词/过滤逻辑算子
  * @ingroup LogicalOperator
  */
 class PredicateLogicalOperator : public LogicalOperator
 {
 public:
+  /// @brief 持有一个顶层布尔表达式作为过滤条件。
   PredicateLogicalOperator(unique_ptr<Expression> expression);
   virtual ~PredicateLogicalOperator() = default;
 

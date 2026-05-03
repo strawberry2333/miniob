@@ -21,23 +21,31 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/lang/mutex.h"
 
+/**
+ * @file communicator.cpp
+ * @brief Communicator 基类和协议工厂的实现。
+ */
+
 RC Communicator::init(int fd, unique_ptr<Session> session, const string &addr)
 {
+  // 连接级资源在这里统一落地，派生类只补充协议相关初始化逻辑。
   fd_      = fd;
   session_ = std::move(session);
   addr_    = addr;
-  writer_  = new BufferedWriter(fd_);
+  writer_  = new BufferedWriter(fd_);  // 所有协议共享同一套缓冲写路径。
   return RC::SUCCESS;
 }
 
 Communicator::~Communicator()
 {
   if (fd_ >= 0) {
+    // 默认 communicator 拥有网络 fd；CLI 模式会把 fd_ 改成 -1 以跳过这里。
     close(fd_);
     fd_ = -1;
   }
 
   if (writer_ != nullptr) {
+    // BufferedWriter::close 只会刷缓存，不会重复关闭底层 fd。
     delete writer_;
     writer_ = nullptr;
   }
@@ -47,6 +55,7 @@ Communicator::~Communicator()
 
 Communicator *CommunicatorFactory::create(CommunicateProtocol protocol)
 {
+  // 工厂只负责根据协议类型挑选具体实现，连接级初始化在 accept 后完成。
   switch (protocol) {
     case CommunicateProtocol::PLAIN: {
       return new PlainCommunicator;

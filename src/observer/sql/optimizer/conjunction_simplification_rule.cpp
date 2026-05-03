@@ -16,6 +16,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 #include "sql/expr/expression.h"
 
+/**
+ * @file conjunction_simplification_rule.cpp
+ * @brief 逻辑与/或表达式的常量化简实现。
+ */
+
 RC try_to_get_bool_constant(unique_ptr<Expression> &expr, bool &constant_value)
 {
   if (expr->type() == ExprType::VALUE && expr->value_type() == AttrType::BOOLEANS) {
@@ -51,6 +56,7 @@ RC ConjunctionSimplificationRule::rewrite(unique_ptr<Expression> &expr, bool &ch
 
     if (conjunction_expr->conjunction_type() == ConjunctionExpr::Type::AND) {
       if (constant_value == true) {
+        // `true AND x` 不影响结果，可以直接裁掉该孩子。
         child_exprs.erase(iter);
       } else {
         // always be false
@@ -74,6 +80,7 @@ RC ConjunctionSimplificationRule::rewrite(unique_ptr<Expression> &expr, bool &ch
   }
   if (child_exprs.size() == 1) {
     LOG_TRACE("conjunction expression has only 1 child");
+    // 只有一个孩子时，父 conjunction 已经没有存在意义，直接退化成该孩子。
     unique_ptr<Expression> child_expr = std::move(child_exprs.front());
     child_exprs.clear();
     expr = std::move(child_expr);

@@ -17,12 +17,18 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/logical_operator.h"
 
 /**
+ * @file delete_logical_operator.h
+ * @brief `DELETE` 语句的逻辑算子。
+ */
+
+/**
  * @brief 逻辑算子，用于执行delete语句
  * @ingroup LogicalOperator
  */
 class DeleteLogicalOperator : public LogicalOperator
 {
 public:
+  /// @brief 绑定待删除的目标表，筛选条件由子树提供。
   DeleteLogicalOperator(Table *table);
   virtual ~DeleteLogicalOperator() = default;
 

@@ -27,6 +27,11 @@ class SharedMutex;
 }
 
 /**
+ * @file latch_memo.h
+ * @brief 定义 B+ 树操作中页锁与 pin 生命周期的收集器。
+ */
+
+/**
  * @brief 对指定页面做的操作类型
  */
 enum class LatchMemoType
@@ -57,6 +62,7 @@ public:
   LatchMemo(DiskBufferPool *buffer_pool);
   ~LatchMemo();
 
+  /// @brief 获取并 pin 住指定页，同时把该动作记录到 memo 中。
   RC get_page(PageNum page_num, Frame *&frame);
 
   /// @brief 分配页面

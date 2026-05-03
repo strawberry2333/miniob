@@ -14,8 +14,14 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/memory.h"
 #include "sql/operator/physical_operator.h"
 
+/**
+ * @file optimizer_utils.h
+ * @brief 优化器相关的辅助工具。
+ */
+
 class OptimizerUtils
 {
 public:
+  /// @brief 把物理计划树格式化成 `EXPLAIN` 使用的文本树。
   static string dump_physical_plan(const unique_ptr<PhysicalOperator> &root);
 };

@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/logical_operator.h"
 
+/**
+ * @file logical_operator.cpp
+ * @brief 逻辑算子基类的通用实现。
+ */
+
 LogicalOperator::~LogicalOperator() {}
 
 void LogicalOperator::add_child(unique_ptr<LogicalOperator> oper) {
@@ -41,8 +46,8 @@ bool LogicalOperator::can_generate_vectorized_operator(const LogicalOperatorType
 void LogicalOperator::generate_general_child()
 {
   for (auto &child : children_) {
+    // 级联优化器不直接依赖 `unique_ptr` 结构，因此先生成一份裸指针视图。
     general_children_.push_back(child.get());
     child->generate_general_child();
   }
 }
-

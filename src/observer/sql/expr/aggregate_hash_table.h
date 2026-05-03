@@ -17,11 +17,22 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/expression.h"
 
 /**
+ * @file aggregate_hash_table.h
+ * @brief 向量化 group by 使用的聚合哈希表抽象。
+ * @details 该文件同时保留了通用哈希表实现和 SIMD 线性探测实验实现，供
+ * `GroupByVecPhysicalOperator` 一类算子复用。
+ */
+
+/**
  * @brief 用于hash group by 的哈希表实现，不支持并发访问。
  */
 class AggregateHashTable
 {
 public:
+  /**
+   * @brief 聚合结果扫描器。
+   * @details group by 阶段先把结果累积进哈希表，输出阶段再通过扫描器逐块 materialize。
+   */
   class Scanner
   {
   public:
@@ -51,6 +62,10 @@ public:
   vector<AttrType>            aggr_child_types_;
 };
 
+/**
+ * @brief 基于 `unordered_map` 的通用聚合哈希表。
+ * @details 键是 group by 列值列表，值是与聚合表达式一一对应的聚合状态数组。
+ */
 class StandardAggregateHashTable : public AggregateHashTable
 {
 private:
@@ -116,6 +131,10 @@ template <typename V>
 class LinearProbingAggregateHashTable : public AggregateHashTable
 {
 public:
+  /**
+   * @brief 线性探测哈希表的顺序扫描器。
+   * @details 扫描时按桶位顺序跳过空槽，把命中的 key/value 直接写回输出 chunk。
+   */
   class Scanner : public AggregateHashTable::Scanner
   {
   public:

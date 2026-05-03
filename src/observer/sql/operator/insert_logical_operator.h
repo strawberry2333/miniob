@@ -18,12 +18,18 @@ See the Mulan PSL v2 for more details. */
 #include "sql/parser/parse_defs.h"
 
 /**
+ * @file insert_logical_operator.h
+ * @brief `INSERT` 语句的逻辑算子。
+ */
+
+/**
  * @brief 插入逻辑算子
  * @ingroup LogicalOperator
  */
 class InsertLogicalOperator : public LogicalOperator
 {
 public:
+  /// @brief 绑定目标表与待写入的值列表。
   InsertLogicalOperator(Table *table, vector<Value> values);
   virtual ~InsertLogicalOperator() = default;
 

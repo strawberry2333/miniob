@@ -10,6 +10,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/executor/set_variable_executor.h"
 
+/**
+ * @file set_variable_executor.cpp
+ * @brief 实现会话变量修改命令的执行逻辑。
+ */
+
 RC SetVariableExecutor::execute(SQLStageEvent *sql_event)
 {
     RC rc = RC::SUCCESS;
@@ -19,7 +24,7 @@ RC SetVariableExecutor::execute(SQLStageEvent *sql_event)
 
     const char  *var_name  = stmt->var_name();
     const Value &var_value = stmt->var_value();
-    // TODO: refactor the variable configuration
+    // 这里统一做变量名分发；新增配置项时通常在这一层扩展。
     if (strcasecmp(var_name, "sql_debug") == 0) {
       bool bool_value = false;
       rc              = var_value_to_boolean(var_value, bool_value);
@@ -36,6 +41,7 @@ RC SetVariableExecutor::execute(SQLStageEvent *sql_event)
         rc = RC::INVALID_ARGUMENT;
       }
     } else if (strcasecmp(var_name, "hash_join") == 0) { // TODO: remove this configuration
+        // 兼容旧实验开关，仍通过布尔值控制。
         bool bool_value = false;
         rc              = var_value_to_boolean(var_value, bool_value);
         if (rc == RC::SUCCESS) {
@@ -43,7 +49,7 @@ RC SetVariableExecutor::execute(SQLStageEvent *sql_event)
           LOG_TRACE("set hash_join to %d", bool_value);
         }
       } else if (strcasecmp(var_name, "use_cascade") == 0) {
-        // TODO: remove this params, due to the dblab needed, likely to be long-existing
+        // 兼容实验参数，当前仍保留在会话级别。
         bool bool_value = false;
         rc              = var_value_to_boolean(var_value, bool_value);
         if (rc == RC::SUCCESS) {
@@ -61,6 +67,7 @@ RC SetVariableExecutor::var_value_to_boolean(const Value &var_value, bool &bool_
 {
     RC rc = RC::SUCCESS;
 
+    // 允许多种 SQL 字面量形式映射到布尔值，方便做会话级实验开关。
     if (var_value.attr_type() == AttrType::BOOLEANS) {
       bool_value = var_value.get_boolean();
     } else if (var_value.attr_type() == AttrType::INTS) {
@@ -73,6 +80,7 @@ RC SetVariableExecutor::var_value_to_boolean(const Value &var_value, bool &bool_
 
       string false_strings[] = {"false", "off", "no", "f", "0"};
 
+      // 字符串匹配按大小写不敏感处理，与大多数数据库配置习惯保持一致。
       for (size_t i = 0; i < sizeof(true_strings) / sizeof(true_strings[0]); i++) {
         if (strcasecmp(var_value.get_string().c_str(), true_strings[i].c_str()) == 0) {
           bool_value = true;
@@ -96,6 +104,7 @@ RC SetVariableExecutor::get_execution_mode(const Value &var_value, ExecutionMode
 {
     RC rc = RC::SUCCESS;
   
+    // 执行模式目前只接受字符串枚举，便于 SQL 层显式切换 tuple/chunk 模式。
     if (var_value.attr_type() == AttrType::CHARS) {
       if (strcasecmp(var_value.get_string().c_str(), "TUPLE_ITERATOR") == 0) {
         execution_mode = ExecutionMode::TUPLE_ITERATOR;

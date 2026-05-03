@@ -12,15 +12,24 @@
 #include "sql/parser/lex_sql.h"
 #include "sql/expr/expression.h"
 
+/*
+ * @file yacc_sql.y
+ * @brief MiniOB SQL 语法规则定义。
+ * @details 该文件负责把词法 token 组装成 `ParsedSqlNode`，保持尽量“贴近 SQL 文本”的结构，
+ * 复杂的表/字段绑定和语义检查会留到 resolve/bind 阶段。
+ */
+
 using namespace std;
 
 string token_name(const char *sql_string, YYLTYPE *llocp)
 {
+  // 根据位置信息截取原 SQL 中的片段，用作表达式默认显示名。
   return string(sql_string + llocp->first_column, llocp->last_column - llocp->first_column + 1);
 }
 
 int yyerror(YYLTYPE *llocp, const char *sql_string, ParsedSqlResult *sql_result, yyscan_t scanner, const char *msg)
 {
+  // 语法错误统一包装成一条 `SCF_ERROR` 节点，供 parse stage 后续判断。
   unique_ptr<ParsedSqlNode> error_sql_node = make_unique<ParsedSqlNode>(SCF_ERROR);
   error_sql_node->error.error_msg = msg;
   error_sql_node->error.line = llocp->first_line;
@@ -35,6 +44,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
                                              const char *sql_string,
                                              YYLTYPE *llocp)
 {
+  // 算术表达式在 parse 阶段先保留成未绑定表达式树，并记录原始 SQL 片段名。
   ArithmeticExpr *expr = new ArithmeticExpr(type, left, right);
   expr->set_name(token_name(sql_string, llocp));
   return expr;
@@ -45,6 +55,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
                                            const char *sql_string,
                                            YYLTYPE *llocp)
 {
+  // 聚合函数名要等 bind 阶段再映射成具体枚举，这里先保留字符串形式。
   UnboundAggregateExpr *expr = new UnboundAggregateExpr(aggregate_name, child);
   expr->set_name(token_name(sql_string, llocp));
   return expr;
@@ -210,6 +221,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %right UMINUS
 %%
 
+/* 入口规则：当前语法只消费一条 SQL，并把结果追加到 ParsedSqlResult。 */
 commands: command_wrapper opt_semicolon  //commands or sqls. parser starts here.
   {
     unique_ptr<ParsedSqlNode> sql_node = unique_ptr<ParsedSqlNode>($1);
@@ -217,6 +229,7 @@ commands: command_wrapper opt_semicolon  //commands or sqls. parser starts here.
   }
   ;
 
+/* 顶层命令分发：每个分支都构造一棵 ParsedSqlNode。 */
 command_wrapper:
     calc_stmt
   | select_stmt
@@ -276,6 +289,7 @@ rollback_stmt:
     }
     ;
 
+/* DDL/会话控制类规则：主要做简单字段填充，不承担复杂语义校验。 */
 drop_table_stmt:    /*drop table 语句的语法解析树*/
     DROP TABLE ID {
       $$ = new ParsedSqlNode(SCF_DROP_TABLE);
@@ -327,8 +341,8 @@ create_table_stmt:    /*create table 语句的语法解析树*/
       $$ = new ParsedSqlNode(SCF_CREATE_TABLE);
       CreateTableSqlNode &create_table = $$->create_table;
       create_table.relation_name = $3;
-      //free($3);
 
+      // 属性定义列表和主键列表都通过 swap 转移所有权，避免额外复制。
       create_table.attr_infos.swap(*$5);
       delete $5;
 
@@ -341,7 +355,8 @@ create_table_stmt:    /*create table 语句的语法解析树*/
       }
     }
     ;
-    
+
+/* 表定义相关子规则：把列定义、长度、主键等内容组装进临时容器。 */
 attr_def_list:
     attr_def
     {
@@ -409,6 +424,7 @@ attr_list:
     }
     ;
 
+/* DML 规则：负责把 values/conditions/relations 等文本结构整理成解析节点。 */
 insert_stmt:        /*insert   语句的语法解析树*/
     INSERT INTO ID VALUES LBRACE value_list RBRACE 
     {
@@ -457,7 +473,7 @@ storage_format:
       $$ = $4;
     }
     ;
-    
+
 delete_stmt:    /*  delete 语句的语法解析树*/
     DELETE FROM ID where 
     {
@@ -516,6 +532,7 @@ calc_stmt:
     }
     ;
 
+/* 表达式规则：这里构造的是未绑定表达式树，具体表/字段解析留给 binder。 */
 expression_list:
     expression
     {
@@ -534,6 +551,7 @@ expression_list:
     ;
 expression:
     expression '+' expression {
+      // 二元算术表达式按左递归方式建树，便于保留运算符优先级。
       $$ = create_arithmetic_expression(ArithmeticExpr::Type::ADD, $1, $3, sql_string, &@$);
     }
     | expression '-' expression {
@@ -553,6 +571,7 @@ expression:
       $$ = create_arithmetic_expression(ArithmeticExpr::Type::NEGATIVE, $2, nullptr, sql_string, &@$);
     }
     | '*' {
+      // `*` 既可以表示 SELECT *，也可以作为 COUNT(*) 的参数，后续由 binder 判定语义。
       $$ = new StarExpr();
     }
     | value {
@@ -577,6 +596,7 @@ aggregate_expression:
     }
     ;
 
+/* FROM/WHERE 子规则：记录表列表和比较条件，还不做 schema 绑定。 */
 rel_attr:
     ID {
       $$ = new RelAttrSqlNode;
@@ -695,7 +715,7 @@ comp_op:
     | NE { $$ = NOT_EQUAL; }
     ;
 
-// your code here
+/* GROUP BY 当前与 SELECT 共用表达式规则，真正的合法性限制留在后续阶段。 */
 group_by:
     /* empty */
     {
@@ -708,6 +728,8 @@ group_by:
       $$ = $3;
     }
     ;
+
+/* LOAD DATA 规则：保留文件路径和格式控制参数文本，执行器再决定如何消费。 */
 load_data_stmt:
     LOAD DATA INFILE SSS INTO TABLE ID fields_terminated_by enclosed_by
     {
@@ -750,6 +772,7 @@ enclosed_by:
       $$ = $3;
     };
 
+/* EXPLAIN 和 SET 都是“包一层”的语法：内部 SQL 或变量值后续再进入 resolve/executor。 */
 explain_stmt:
     EXPLAIN command_wrapper
     {
@@ -778,10 +801,12 @@ extern void scan_string(const char *str, yyscan_t scanner);
 int sql_parse(const char *s, ParsedSqlResult *sql_result) {
   yyscan_t scanner;
   std::vector<char *> allocated_strings;
+  // scanner 的额外上下文里保存所有 strdup 出来的字符串，parse 结束后统一释放。
   yylex_init_extra(static_cast<void*>(&allocated_strings),&scanner);
   scan_string(s, scanner);
   int result = yyparse(s, sql_result, scanner);
 
+  // 词法层分配的字符串都在这里集中回收，避免语法动作分支里到处手写 free。
   for (char *ptr : allocated_strings) {
     free(ptr);
   }

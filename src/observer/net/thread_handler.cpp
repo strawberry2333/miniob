@@ -20,10 +20,16 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 #include "common/lang/string.h"
 
+/**
+ * @file thread_handler.cpp
+ * @brief ThreadHandler 工厂实现。
+ */
+
 ThreadHandler * ThreadHandler::create(const char *name)
 {
   const char *default_name = "one-thread-per-connection";
   if (nullptr == name || common::is_blank(name)) {
+    // 没有显式配置时走最简单、最容易理解的教学模型。
     name = default_name;
   }
 

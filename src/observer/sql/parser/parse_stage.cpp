@@ -26,15 +26,21 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file parse_stage.cpp
+ * @brief 实现 SQL 词法/语法分析阶段。
+ */
+
 RC ParseStage::handle_request(SQLStageEvent *sql_event)
 {
   RC rc = RC::SUCCESS;
 
-  SqlResult         *sql_result = sql_event->session_event()->sql_result();
+  SqlResult    *sql_result = sql_event->session_event()->sql_result();
   const string &sql        = sql_event->sql();
 
   ParsedSqlResult parsed_sql_result;
 
+  // 第 1 阶段：把原始 SQL 文本解析成 `ParsedSqlNode` 列表。
   parse(sql.c_str(), &parsed_sql_result);
   if (parsed_sql_result.sql_nodes().empty()) {
     sql_result->set_return_code(RC::SUCCESS);
@@ -46,6 +52,7 @@ RC ParseStage::handle_request(SQLStageEvent *sql_event)
     LOG_WARN("got multi sql commands but only 1 will be handled");
   }
 
+  // 第 2 阶段：当前执行链路只消费第一条 SQL，把它转移给事件对象。
   unique_ptr<ParsedSqlNode> sql_node = std::move(parsed_sql_result.sql_nodes().front());
   if (sql_node->flag == SCF_ERROR) {
     // set error information to event
@@ -55,6 +62,7 @@ RC ParseStage::handle_request(SQLStageEvent *sql_event)
     return rc;
   }
 
+  // 第 3 阶段：把成功解析的语法节点挂到 SQL 事件，供 resolve 阶段继续处理。
   sql_event->set_sql_node(std::move(sql_node));
 
   return RC::SUCCESS;

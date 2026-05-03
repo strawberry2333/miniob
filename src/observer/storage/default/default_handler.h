@@ -23,8 +23,14 @@ class Trx;
 class TrxKit;
 
 /**
- * @brief 数据库存储引擎的入口
+ * @file default_handler.h
+ * @brief 定义 SQL 层连接默认存储子系统的入口对象。
+ */
+
+/**
+ * @brief 数据库存储引擎的入口。
  * @details 参考MySQL，可以抽象handler层，作为SQL层与存储层交互的接口。但是当前还不具备这个条件。
+ * `DefaultHandler` 自身不实现复杂并发控制，只负责维护已打开数据库对象的生命周期。
  */
 class DefaultHandler
 {
@@ -40,6 +46,10 @@ public:
    * @param log_handler_name 使用哪种类型的日志处理器
    */
   RC   init(const char *base_dir, const char *trx_kit_name, const char *log_handler_name, const char *storage_engine);
+  /**
+   * @brief 销毁已打开的数据库对象并触发一次同步。
+   * @details 当前实现假设调用方已停止新的数据库访问；如果 `sync` 失败不会中断清理流程。
+   */
   void destroy();
 
   /**
@@ -85,9 +95,15 @@ public:
   RC drop_table(const char *dbname, const char *relation_name);
 
 public:
+  /// @brief 在已打开数据库集合中按名查找数据库对象。
   Db    *find_db(const char *dbname) const;
+  /// @brief 在指定数据库中按名查找表对象。
   Table *find_table(const char *dbname, const char *table_name) const;
 
+  /**
+   * @brief 将所有已打开数据库的脏数据和元数据刷盘。
+   * @details 任一数据库同步失败都会立即返回对应错误码。
+   */
   RC sync();
 
 private:

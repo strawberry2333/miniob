@@ -23,6 +23,11 @@ See the Mulan PSL v2 for more details. */
 class BufferPoolManager;
 
 /**
+ * @file integrated_log_replayer.h
+ * @brief 定义把多类模块日志汇总分发的总回放器。
+ */
+
+/**
  * @brief 整体日志回放类
  * @ingroup Clog
  * @details 负责回放所有日志，是其它各模块日志回放的分发器
@@ -53,8 +58,8 @@ public:
   RC on_done() override;
 
 private:
-  BufferPoolLogReplayer   buffer_pool_log_replayer_;  ///< 缓冲池日志回放器
-  RecordLogReplayer       record_log_replayer_;       ///< record manager 日志回放器
-  BplusTreeLogReplayer    bplus_tree_log_replayer_;   ///< bplus tree 日志回放器
-  unique_ptr<LogReplayer> trx_log_replayer_;          ///< trx 日志回放器
+  BufferPoolLogReplayer   buffer_pool_log_replayer_;  ///< 缓冲池日志回放器。
+  RecordLogReplayer       record_log_replayer_;       ///< Record manager 日志回放器。
+  BplusTreeLogReplayer    bplus_tree_log_replayer_;   ///< B+ 树日志回放器。
+  unique_ptr<LogReplayer> trx_log_replayer_;          ///< 事务日志回放器，可按事务模型替换。
 };

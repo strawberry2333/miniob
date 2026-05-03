@@ -13,8 +13,14 @@ See the Mulan PSL v2 for more details. */
 #include "storage/index/index.h"
 
 /**
+ * @file ivfflat_index.h
+ * @brief 预留的 IVF-Flat 向量索引接口定义。
+ */
+
+/**
  * @brief ivfflat 向量索引
  * @ingroup Index
+ * @details 当前仅保留接口骨架，尚未实现真正的建索引、搜索和持久化逻辑。
  */
 class IvfflatIndex : public Index
 {

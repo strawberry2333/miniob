@@ -18,22 +18,28 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file expression_iterator.cpp
+ * @brief 表达式树一层遍历的分发实现。
+ */
+
 RC ExpressionIterator::iterate_child_expr(Expression &expr, function<RC(unique_ptr<Expression> &)> callback)
 {
   RC rc = RC::SUCCESS;
 
   switch (expr.type()) {
     case ExprType::CAST: {
+      // 一元转换表达式只暴露一个孩子。
       auto &cast_expr = static_cast<CastExpr &>(expr);
       rc = callback(cast_expr.child());
     } break;
 
     case ExprType::COMPARISON: {
-
       auto &comparison_expr = static_cast<ComparisonExpr &>(expr);
       rc = callback(comparison_expr.left());
 
       if (OB_SUCC(rc)) {
+        // 只有左孩子处理成功时才继续访问右孩子，避免覆盖原始错误码。
         rc = callback(comparison_expr.right());
       }
 
@@ -50,10 +56,10 @@ RC ExpressionIterator::iterate_child_expr(Expression &expr, function<RC(unique_p
     } break;
 
     case ExprType::ARITHMETIC: {
-
       auto &arithmetic_expr = static_cast<ArithmeticExpr &>(expr);
       rc = callback(arithmetic_expr.left());
       if (OB_SUCC(rc)) {
+        // 一元负号表达式的 `right()` 可能为空，回调需要自行兼容空指针语义。
         rc = callback(arithmetic_expr.right());
       }
     } break;

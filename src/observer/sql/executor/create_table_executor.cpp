@@ -21,16 +21,23 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/create_table_stmt.h"
 #include "storage/db/db.h"
 
+/**
+ * @file create_table_executor.cpp
+ * @brief 实现建表命令的执行逻辑。
+ */
+
 RC CreateTableExecutor::execute(SQLStageEvent *sql_event)
 {
   Stmt    *stmt    = sql_event->stmt();
   Session *session = sql_event->session_event()->session();
+  // 只接受已经解析和绑定完成的建表语句。
   ASSERT(stmt->type() == StmtType::CREATE_TABLE,
       "create table executor can not run this command: %d",
       static_cast<int>(stmt->type()));
 
   CreateTableStmt *create_table_stmt = static_cast<CreateTableStmt *>(stmt);
 
+  // 解析阶段已经把字段描述、主键和存储格式都整理到 stmt 中，这里只负责落到 DB 层。
   const char *table_name = create_table_stmt->table_name().c_str();
   RC rc = session->get_current_db()->create_table(table_name, create_table_stmt->attr_infos(), create_table_stmt->primary_keys(), create_table_stmt->storage_format());
 

@@ -25,6 +25,13 @@ See the Mulan PSL v2 for more details. */
 class Tuple;
 
 /**
+ * @file expression.h
+ * @brief SQL 表达式树定义。
+ * @details 该文件描述了解析绑定后的表达式节点体系，以及 tuple/chunk 两种执行
+ * 模式共享的求值接口。优化器、逻辑计划、物理算子都会依赖这些类型。
+ */
+
+/**
  * @defgroup Expression
  * @brief 表达式
  */
@@ -273,6 +280,10 @@ public:
   RC get_value(const Tuple &tuple, Value &value) const override;
   RC get_column(Chunk &chunk, Column &column) override;
 
+  /**
+   * @brief 在常量表达式场景下提前完成类型转换。
+   * @details 计划生成器在处理比较两侧类型对齐时会用到它。
+   */
   RC try_get_value(Value &value) const override;
 
   AttrType value_type() const override { return cast_type_; }
@@ -280,6 +291,10 @@ public:
   unique_ptr<Expression> &child() { return child_; }
 
 private:
+  /**
+   * @brief 对单个值执行实际的类型转换。
+   * @details `get_value`、`get_column` 和 `try_get_value` 最终都会走到这里。
+   */
   RC cast(const Value &value, Value &cast_value) const;
 
 private:
@@ -323,11 +338,18 @@ public:
   RC try_get_value(Value &value) const override;
 
   /**
-   * compare the two tuple cells
-   * @param value the result of comparison
+   * @brief 比较两个标量值并返回布尔结果。
+   * @param left 左操作数。
+   * @param right 右操作数。
+   * @param value 比较结果。
+   * @details 行式谓词计算与常量折叠都会复用这个入口。
    */
   RC compare_value(const Value &left, const Value &right, bool &value) const;
 
+  /**
+   * @brief 对整列数据执行向量化比较。
+   * @details 由 `eval` 调用，用于批量更新谓词选择向量。
+   */
   template <typename T>
   RC compare_column(const Column &left, const Column &right, vector<uint8_t> &result) const;
 
@@ -418,6 +440,9 @@ public:
 
   RC get_column(Chunk &chunk, Column &column) override;
 
+  /**
+   * @brief 在没有输入 tuple 时尝试把算术表达式折叠为常量。
+   */
   RC try_get_value(Value &value) const override;
 
   Type arithmetic_type() const { return arithmetic_type_; }
@@ -426,10 +451,13 @@ public:
   unique_ptr<Expression> &right() { return right_; }
 
 private:
+  /// @brief 对一对标量值执行算术运算。
   RC calc_value(const Value &left_value, const Value &right_value, Value &value) const;
 
+  /// @brief 对两列数据执行算术运算，并构造输出列。
   RC calc_column(const Column &left_column, const Column &right_column, Column &column) const;
 
+  /// @brief 根据左右列是否为常量列分派到最合适的模板实现。
   template <bool LEFT_CONSTANT, bool RIGHT_CONSTANT>
   RC execute_calc(const Column &left, const Column &right, Column &result, Type type, AttrType attr_type) const;
 
@@ -465,6 +493,11 @@ private:
   unique_ptr<Expression> child_;
 };
 
+/**
+ * @brief 绑定完成后的聚合表达式。
+ * @details `GroupByLogicalOperator` 会扫描查询表达式中的 `AggregateExpr`，
+ * 为它们分配在 group by 输出 chunk 中的位置，并驱动对应的聚合执行器。
+ */
 class AggregateExpr : public Expression
 {
 public:
@@ -522,6 +555,11 @@ public:
   unique_ptr<Aggregator> create_aggregator() const;
 
 public:
+  /**
+   * @brief 把 SQL 中的聚合函数名映射到内部枚举。
+   * @param type_str 解析阶段得到的函数名。
+   * @param type 输出的聚合类型。
+   */
   static RC type_from_string(const char *type_str, Type &type);
 
 private:

@@ -19,6 +19,11 @@ See the Mulan PSL v2 for more details. */
 class LogEntry;
 
 /**
+ * @file log_replayer.h
+ * @brief 定义日志回放器抽象接口。
+ */
+
+/**
  * @brief 日志回放接口类
  * @ingroup CLog
  */

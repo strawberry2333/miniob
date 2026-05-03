@@ -34,6 +34,11 @@ class BplusTreeHandler;
 class BplusTreeMiniTransaction;
 
 /**
+ * @file bplus_tree.h
+ * @brief 定义 B+ 树页面布局、节点操作器与扫描接口。
+ */
+
+/**
  * @brief B+树的实现
  * @defgroup BPlusTree
  */

@@ -25,6 +25,11 @@ class LogHandler;
 struct Page;
 
 /**
+ * @file buffer_pool_log.h
+ * @brief 定义缓冲池页面分配/回收的 WAL 记录与回放器。
+ */
+
+/**
  * @brief BufferPool 的日志相关操作类型
  * @ingroup CLog
  */

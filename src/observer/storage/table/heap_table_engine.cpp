@@ -15,6 +15,10 @@ See the Mulan PSL v2 for more details. */
 #include "storage/common/meta_util.h"
 #include "storage/db/db.h"
 
+/**
+ * @file heap_table_engine.cpp
+ * @brief Heap 表引擎对记录、索引和扫描器的协同实现。
+ */
 
 HeapTableEngine::~HeapTableEngine()
 {
@@ -39,6 +43,7 @@ HeapTableEngine::~HeapTableEngine()
 RC HeapTableEngine::insert_record(Record &record)
 {
   RC rc = RC::SUCCESS;
+  // 先写数据页，再维护索引；如果索引插入失败，必须显式回滚前面已经成功的数据写入。
   rc    = record_handler_->insert_record(record.data(), table_meta_->record_size(), &record.rid());
   if (rc != RC::SUCCESS) {
     LOG_ERROR("Insert record failed. table name=%s, rc=%s", table_meta_->name(), strrc(rc));
@@ -47,6 +52,7 @@ RC HeapTableEngine::insert_record(Record &record)
 
   rc = insert_entry_of_indexes(record.data(), record.rid());
   if (rc != RC::SUCCESS) {  // 可能出现了键值重复
+    // 索引失败后尽量恢复成“既没有数据，也没有索引项”的状态，避免表与索引不一致。
     RC rc2 = delete_entry_of_indexes(record.data(), record.rid(), false /*error_on_not_exists*/);
     if (rc2 != RC::SUCCESS) {
       LOG_ERROR("Failed to rollback index data when insert index entries failed. table name=%s, rc=%d:%s",
@@ -93,6 +99,7 @@ RC HeapTableEngine::get_record(const RID &rid, Record &record)
 RC HeapTableEngine::delete_record(const Record &record)
 {
   RC rc = RC::SUCCESS;
+  // 删除路径先删索引再删数据，保证扫描器不会先看到失去索引约束的脏记录。
   for (Index *index : indexes_) {
     rc = index->delete_entry(record.data(), &record.rid());
     ASSERT(RC::SUCCESS == rc, 
@@ -138,7 +145,7 @@ RC HeapTableEngine::create_index(Trx *trx, const FieldMeta *field_meta, const ch
     return rc;
   }
 
-  // 创建索引相关数据
+  // 先把空索引文件和内存对象创建出来，再扫描历史记录回填。
   BplusTreeIndex *index      = new BplusTreeIndex();
   string          index_file = table_index_file(db_->path().c_str(), table_meta_->name(), index_name);
 
@@ -149,7 +156,7 @@ RC HeapTableEngine::create_index(Trx *trx, const FieldMeta *field_meta, const ch
     return rc;
   }
 
-  // 遍历当前的所有数据，插入这个索引
+  // 回填阶段读取的是表当前已提交的数据视图；任一插入失败都必须终止，防止产生半成品索引。
   RecordScanner *scanner = nullptr;
   rc = get_record_scanner(scanner, trx, ReadWriteMode::READ_ONLY);
   if (rc != RC::SUCCESS) {
@@ -180,7 +187,7 @@ RC HeapTableEngine::create_index(Trx *trx, const FieldMeta *field_meta, const ch
 
   indexes_.push_back(index);
 
-  /// 接下来将这个索引放到表的元数据中
+  /// 只有索引文件与历史数据都准备好之后，才允许把索引定义写入表元数据。
   TableMeta new_table_meta(*table_meta_);
   rc = new_table_meta.add_index(new_index_meta);
   if (rc != RC::SUCCESS) {
@@ -188,9 +195,7 @@ RC HeapTableEngine::create_index(Trx *trx, const FieldMeta *field_meta, const ch
     return rc;
   }
 
-  /// 内存中有一份元数据，磁盘文件也有一份元数据。修改磁盘文件时，先创建一个临时文件，写入完成后再rename为正式文件
-  /// 这样可以防止文件内容不完整
-  // 创建元数据临时文件
+  /// 元数据持久化采用“写临时文件再 rename 覆盖”的方式，降低写一半崩溃导致的损坏风险。
   string  tmp_file = table_meta_file(db_->path().c_str(), table_meta_->name()) + ".tmp";
   fstream fs;
   fs.open(tmp_file, ios_base::out | ios_base::binary | ios_base::trunc);
@@ -250,6 +255,7 @@ RC HeapTableEngine::delete_entry_of_indexes(const char *record, const RID &rid, 
 RC HeapTableEngine::sync()
 {
   RC rc = RC::SUCCESS;
+  // 先确保所有索引页刷盘，再同步数据文件，避免数据可见但索引仍停留在旧状态。
   for (Index *index : indexes_) {
     rc = index->sync();
     if (rc != RC::SUCCESS) {

@@ -32,6 +32,17 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @brief observer 全局初始化与清理逻辑的实现文件。
+ * @details 这里负责把配置、日志、全局存储对象和进程级状态按顺序装配起来，
+ * 并提供与之对应的逆序清理逻辑。
+ */
+
+/**
+ * @brief 返回保存“是否已初始化”标记的静态地址。
+ * @return 指向初始化标记的指针引用。
+ * @note 用指针而不是裸静态变量，是为了在多个辅助函数之间共享同一块可写状态。
+ */
 bool *&_get_init()
 {
   static bool  util_init   = false;
@@ -39,10 +50,17 @@ bool *&_get_init()
   return util_init_p;
 }
 
+/// @brief 查询 observer 公共初始化流程是否已经执行过。
 bool get_init() { return *_get_init(); }
 
+/// @brief 更新 observer 公共初始化标记。
 void set_init(bool value) { *_get_init() = value; }
 
+/**
+ * @brief 进程信号处理占位函数。
+ * @param sig 收到的信号编号。
+ * @note 当前这里只记录日志，真正的退出逻辑由 main.cpp 中的 quit_signal_handle 驱动。
+ */
 void sig_handler(int sig)
 {
   // Signal handler will be add in the next step.
@@ -51,6 +69,13 @@ void sig_handler(int sig)
   LOG_INFO("Receive one signal of %d.", sig);
 }
 
+/**
+ * @brief 初始化日志系统。
+ * @param process_cfg 进程启动参数。
+ * @param properties 已加载的配置集合。
+ * @return 0 表示成功，非 0 表示失败。
+ * @note 该函数会读取 [LOG] 配置段，决定日志文件名、文件级别和控制台级别。
+ */
 int init_log(ProcessParam *process_cfg, Ini &properties)
 {
   const string &proc_name = process_cfg->get_process_name();
@@ -60,6 +85,7 @@ int init_log(ProcessParam *process_cfg, Ini &properties)
       return 0;
     }
 
+    // 把当前 Session 地址挂到日志上下文里，便于排查请求级别的问题。
     auto log_context_getter = []() { return reinterpret_cast<intptr_t>(Session::current_session()); };
 
     const string        log_section_name = "LOG";
@@ -67,7 +93,7 @@ int init_log(ProcessParam *process_cfg, Ini &properties)
 
     string log_file_name;
 
-    // get log file name
+    // 先决定日志文件名：配置里没写就退回到 <process_name>.log。
     string key = "LOG_FILE_NAME";
 
     map<string, string>::iterator it = log_section.find(key);
@@ -80,6 +106,7 @@ int init_log(ProcessParam *process_cfg, Ini &properties)
 
     log_file_name = getAboslutPath(log_file_name.c_str());
 
+    // 文件日志级别与控制台日志级别分开读取，方便分别控制磁盘与终端噪音。
     LOG_LEVEL log_level = LOG_LEVEL_INFO;
     key                 = ("LOG_FILE_LEVEL");
     it                  = log_section.find(key);
@@ -98,6 +125,7 @@ int init_log(ProcessParam *process_cfg, Ini &properties)
       console_level = (LOG_LEVEL)log;
     }
 
+    // 真正创建默认 logger，并注册上下文 getter。
     LoggerFactory::init_default(log_file_name, log_level, console_level);
     g_log->set_context_getter(log_context_getter);
 
@@ -108,6 +136,7 @@ int init_log(ProcessParam *process_cfg, Ini &properties)
     }
 
     if (process_cfg->is_demon()) {
+      // 守护进程模式下，把 stdout/stderr 也重定向到日志文件，避免输出丢失。
       sys_log_redirect(log_file_name.c_str(), log_file_name.c_str());
     }
 
@@ -120,26 +149,41 @@ int init_log(ProcessParam *process_cfg, Ini &properties)
   return 0;
 }
 
+/**
+ * @brief 销毁全局日志对象。
+ * @details cleanup 阶段调用，用于释放 init_log 创建的默认 logger。
+ */
 void cleanup_log()
 {
-
   if (g_log) {
     delete g_log;
     g_log = nullptr;
   }
 }
 
+/**
+ * @brief 为 SEDA 初始化预留的钩子。
+ * @return 当前总是返回成功。
+ */
 int prepare_init_seda()
 {
   return 0;
 }
 
+/**
+ * @brief 初始化 observer 级全局对象。
+ * @param process_param 进程启动参数。
+ * @param properties 已加载配置。
+ * @return 0 表示成功，非 0 表示失败。
+ * @note 当前最核心的全局对象是 DefaultHandler，它负责存储层的初始化。
+ */
 int init_global_objects(ProcessParam *process_param, Ini &properties)
 {
   GCTX.handler_ = new DefaultHandler();
 
   int ret = 0;
 
+  // 存储引擎、事务组件和 durability mode 都通过启动参数透传给 DefaultHandler。
   RC rc = GCTX.handler_->init("miniob", 
                               process_param->trx_kit_name().c_str(),
                               process_param->durability_mode().c_str(),
@@ -151,6 +195,10 @@ int init_global_objects(ProcessParam *process_param, Ini &properties)
   return ret;
 }
 
+/**
+ * @brief 销毁 observer 级全局对象。
+ * @return 0 表示成功。
+ */
 int uninit_global_objects()
 {
   delete GCTX.handler_;
@@ -159,15 +207,22 @@ int uninit_global_objects()
   return 0;
 }
 
+/**
+ * @brief 执行 observer 公共初始化流程。
+ * @param process_param 进程启动参数。
+ * @return STATUS_SUCCESS 表示成功，否则返回失败码。
+ * @details 初始化顺序依次为：守护进程化、写 pid、加载配置、初始化日志、初始化全局对象。
+ */
 int init(ProcessParam *process_param)
 {
   if (get_init()) {
+    // 避免重复初始化同一套全局资源。
     return 0;
   }
 
   set_init(true);
 
-  // Run as daemon if daemonization requested
+  // 如果要求以守护进程方式运行，需要在尽早的阶段完成进程分叉和标准流重定向。
   int rc = STATUS_SUCCESS;
   if (process_param->is_demon()) {
     rc = daemonize_service(process_param->get_std_out().c_str(), process_param->get_std_err().c_str());
@@ -179,17 +234,15 @@ int init(ProcessParam *process_param)
 
   writePidFile(process_param->get_process_name().c_str());
 
-  // Initialize global variables before enter multi-thread mode
-  // to avoid race condition
-
-  // Read Configuration files
+  // 在进入多线程模式之前先初始化全局资源，避免后续出现并发竞态。
+  // 先加载配置文件，后面的日志和存储初始化都依赖它。
   rc = get_properties()->load(process_param->get_conf());
   if (rc) {
     cerr << "Failed to load configuration files" << endl;
     return rc;
   }
 
-  // Init tracer
+  // 再初始化日志，确保后续步骤发生错误时已经具备统一日志能力。
   rc = init_log(process_param, *get_properties());
   if (rc) {
     cerr << "Failed to init Log" << endl;
@@ -200,13 +253,14 @@ int init(ProcessParam *process_param)
   get_properties()->to_string(conf_data);
   LOG_INFO("Output configuration \n%s", conf_data.c_str());
 
+  // 最后初始化真正的存储/事务等全局对象。
   rc = init_global_objects(process_param, *get_properties());
   if (rc != 0) {
     LOG_ERROR("failed to init global objects");
     return rc;
   }
 
-  // Block interrupt signals before creating child threads.
+  // 这里预留了阻塞信号并交给专门线程处理的方案，目前仍保持注释状态。
   // setSignalHandler(sig_handler);
   // sigset_t newSigset, oset;
   // blockDefaultSignals(&newSigset, &oset);
@@ -218,6 +272,10 @@ int init(ProcessParam *process_param)
   return STATUS_SUCCESS;
 }
 
+/**
+ * @brief 执行 observer 公共清理流程。
+ * @details 释放顺序大体与初始化顺序相反：先销毁全局对象，再释放配置，最后关闭日志。
+ */
 void cleanup_util()
 {
   uninit_global_objects();
@@ -235,4 +293,5 @@ void cleanup_util()
   set_init(false);
 }
 
+/// @brief 对外暴露的 cleanup 包装器。
 void cleanup() { cleanup_util(); }

@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "storage/trx/vacuous_trx.h"
 
+/**
+ * @file vacuous_trx.cpp
+ * @brief 空事务模型实现。
+ */
+
 RC VacuousTrxKit::init() { return RC::SUCCESS; }
 
 const vector<FieldMeta> *VacuousTrxKit::trx_fields() const { return nullptr; }

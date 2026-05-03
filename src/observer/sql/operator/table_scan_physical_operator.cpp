@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+/**
+ * @file table_scan_physical_operator.cpp
+ * @brief 行式全表扫描与下推谓词过滤实现。
+ */
+
 RC TableScanPhysicalOperator::open(Trx *trx)
 {
   RC rc = table_->get_record_scanner(record_scanner_, trx, mode_);
@@ -37,6 +42,7 @@ RC TableScanPhysicalOperator::next()
     LOG_TRACE("got a record. rid=%s", current_record_.rid().to_string().c_str());
     
     tuple_.set_record(&current_record_);
+    // 扫描阶段提前执行可下推谓词，减少上层谓词算子需要处理的行数。
     rc = filter(tuple_, filter_result);
     if (rc != RC::SUCCESS) {
       LOG_TRACE("record filtered failed=%s", strrc(rc));
@@ -92,6 +98,7 @@ RC TableScanPhysicalOperator::filter(RowTuple &tuple, bool &result)
 
     bool tmp_result = value.get_boolean();
     if (!tmp_result) {
+      // 谓词列表按 AND 语义组合，因此任一条件失败即可提前退出。
       result = false;
       return rc;
     }

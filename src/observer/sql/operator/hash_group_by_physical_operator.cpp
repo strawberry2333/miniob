@@ -20,6 +20,11 @@ See the Mulan PSL v2 for more details. */
 using namespace std;
 using namespace common;
 
+/**
+ * @file hash_group_by_physical_operator.cpp
+ * @brief 行式分组聚合算子的实现。
+ */
+
 HashGroupByPhysicalOperator::HashGroupByPhysicalOperator(
     vector<unique_ptr<Expression>> &&group_by_exprs, vector<Expression *> &&expressions)
     : GroupByPhysicalOperator(std::move(expressions)), group_by_exprs_(std::move(group_by_exprs))
@@ -170,6 +175,7 @@ RC HashGroupByPhysicalOperator::find_group(const Tuple &child_tuple, GroupType *
 
     CompositeTuple composite_tuple;
     composite_tuple.add_tuple(make_unique<ValueListTuple>(std::move(child_tuple_to_value)));
+    // 新分组会缓存一份原始行快照，供 `SELECT group_col, sum(...)` 这类输出直接取值。
     groups_.emplace_back(std::move(group_by_evaluated_tuple), 
                          GroupValueType(std::move(aggregator_list), std::move(composite_tuple)));
     found_group = &groups_.back();

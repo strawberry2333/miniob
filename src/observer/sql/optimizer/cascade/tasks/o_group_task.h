@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/group.h"
 
 /**
+ * @file o_group_task.h
+ * @brief group 级优化任务声明。
+ */
+
+/**
  * @brief: OptimizeGroup, find the best plan for a group
  */
 class OptimizeGroup : public CascadeTask

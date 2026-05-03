@@ -20,6 +20,11 @@ See the Mulan PSL v2 for more details. */
 using namespace std;
 using namespace common;
 
+/**
+ * @file scalar_group_by_physical_operator.cpp
+ * @brief 标量聚合算子的实现。
+ */
+
 ScalarGroupByPhysicalOperator::ScalarGroupByPhysicalOperator(vector<Expression *> &&expressions)
     : GroupByPhysicalOperator(std::move(expressions))
 {}
@@ -63,6 +68,7 @@ RC ScalarGroupByPhysicalOperator::open(Trx *trx)
 
       CompositeTuple composite_tuple;
       composite_tuple.add_tuple(make_unique<ValueListTuple>(std::move(child_tuple_to_value)));
+      // 首行输入同时承担“保留原始输出列样例”和“初始化聚合器状态”两项职责。
       group_value_ = make_unique<GroupValueType>(std::move(aggregator_list), std::move(composite_tuple));
     }
     

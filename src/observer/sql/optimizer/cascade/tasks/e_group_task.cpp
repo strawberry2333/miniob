@@ -12,6 +12,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/tasks/o_expr_task.h"
 #include "common/log/log.h"
 
+/**
+ * @file e_group_task.cpp
+ * @brief group 探索任务实现。
+ */
+
 void ExploreGroup::perform()
 {
   LOG_TRACE("ExploreGroup::perform() ");
@@ -20,6 +25,7 @@ void ExploreGroup::perform()
   }
 
   for (auto &logical_expr : group_->get_logical_expressions()) {
+    // Explore 只负责把逻辑表达式展开成规则应用任务，不参与代价计算。
     push_task(new OptimizeExpression(logical_expr, context_));
   }
 

@@ -22,7 +22,12 @@ class Db;
 class Table;
 
 /**
- * @brief 描述算术运算语句
+ * @file calc_stmt.h
+ * @brief 定义 `CALC` 语句的语义对象。
+ */
+
+/**
+ * @brief 表示只计算表达式结果的 `CALC` 语句。
  * @ingroup Statement
  */
 class CalcStmt : public Stmt
@@ -34,17 +39,25 @@ public:
   StmtType type() const override { return StmtType::CALC; }
 
 public:
+  /**
+   * @brief 从 parse 阶段的表达式列表构造 `CalcStmt`。
+   * @param calc_sql parse 阶段语法节点，会把表达式所有权移动进 stmt。
+   * @param stmt 输出语句对象。
+   * @return 总是返回 `RC::SUCCESS`。
+   */
   static RC create(CalcSqlNode &calc_sql, Stmt *&stmt)
   {
     CalcStmt *calc_stmt     = new CalcStmt();
+    // `CALC` 不需要额外 schema 绑定，直接接管 parse 阶段构造的表达式树。
     calc_stmt->expressions_ = std::move(calc_sql.expressions);
     stmt                    = calc_stmt;
     return RC::SUCCESS;
   }
 
 public:
+  /// 返回需要计算的表达式列表。
   vector<unique_ptr<Expression>> &expressions() { return expressions_; }
 
 private:
-  vector<unique_ptr<Expression>> expressions_;
+  vector<unique_ptr<Expression>> expressions_;  ///< 按输出顺序保存的表达式树
 };

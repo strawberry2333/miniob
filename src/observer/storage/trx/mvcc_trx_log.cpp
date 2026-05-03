@@ -23,6 +23,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file mvcc_trx_log.cpp
+ * @brief MVCC 事务日志的序列化、刷盘等待与恢复实现。
+ */
+
 string MvccTrxLogOperation::to_string() const
 {
   string ret = std::to_string(index()) + ":";
@@ -114,8 +119,7 @@ RC MvccTrxLogHandler::commit(int32_t trx_id, int32_t commit_trx_id)
     return rc;
   }
 
-  // 我们在这里粗暴的等待日志写入到磁盘
-  // 有必要的话，可以让上层来决定如何等待
+  // commit 必须满足 WAL 持久化约束，所以这里同步等待对应 LSN 落盘后再向上返回成功。
   return log_handler_.wait_lsn(lsn);
 }
 
@@ -141,7 +145,7 @@ RC MvccTrxLogReplayer::replay(const LogEntry &entry)
 {
   RC rc = RC::SUCCESS;
 
-  // 由于当前没有check point，所以所有的事务都重做。
+  // 当前没有 checkpoint，恢复时只能从头顺序重放所有事务日志。
 
   ASSERT(entry.module().id() == LogModule::Id::TRANSACTION, "invalid log module id: %d", entry.module().id());
 
@@ -160,10 +164,10 @@ RC MvccTrxLogReplayer::replay(const LogEntry &entry)
     trx = trx_iter->second;
   }
 
-  /// 直接调用事务代码自己的重放函数
+  /// 直接复用事务对象自己的 redo 逻辑，避免在 replayer 中复制状态机。
   rc = trx->redo(&db_, entry);
 
-  /// 如果事务结束了，需要从内存中把它删除
+  /// commit/rollback 之后该事务已完成恢复，不再需要保留在活动映射中。
   if (MvccTrxLogOperation(header->operation_type).type() == MvccTrxLogOperation::Type::ROLLBACK ||
       MvccTrxLogOperation(header->operation_type).type() == MvccTrxLogOperation::Type::COMMIT) {
     Trx *trx = trx_map_[header->trx_id];
@@ -176,7 +180,7 @@ RC MvccTrxLogReplayer::replay(const LogEntry &entry)
 
 RC MvccTrxLogReplayer::on_done()
 {
-  /// 日志回放已经完成，需要把没有提交的事务，回滚掉
+  /// 日志回放结束后，仍残留在映射中的事务代表“崩溃时未完成提交”，需要统一回滚。
   for (auto &pair : trx_map_) {
     MvccTrx *trx = pair.second;
     trx->rollback(); // 恢复时的rollback，可能遇到之前已经回滚一半的事务又再次调用回滚的情况

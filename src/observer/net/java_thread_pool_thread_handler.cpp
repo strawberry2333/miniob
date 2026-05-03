@@ -24,14 +24,20 @@ See the Mulan PSL v2 for more details. */
 using namespace common;
 
 /**
- * @brief libevent 消息回调函数的参数
- * 
+ * @file java_thread_pool_thread_handler.cpp
+ * @brief 基于 libevent + 线程池 的连接调度实现。
+ */
+
+/**
+ * @brief libevent 回调上下文。
+ * @details 一个连接对应一个 EventCallbackAg，里面同时保存连接对象和 libevent 的 event
+ * 句柄，方便在不同线程之间转交所有权相关的元数据。
  */
 struct EventCallbackAg
 {
-  JavaThreadPoolThreadHandler *host = nullptr;
-  Communicator *communicator = nullptr;
-  struct event *ev = nullptr;
+  JavaThreadPoolThreadHandler *host = nullptr;  ///< 宿主线程模型，用于回调 close_connection。
+  Communicator *communicator = nullptr;         ///< 关联的连接对象。
+  struct event *ev = nullptr;                   ///< 当前连接在 event_base 上注册的读事件。
 };
 
 JavaThreadPoolThreadHandler::~JavaThreadPoolThreadHandler()
@@ -47,17 +53,17 @@ RC JavaThreadPoolThreadHandler::start()
     return RC::INTERNAL;
   }
 
-  // 在多线程场景下使用libevent，先执行这个函数
+  // 多线程使用 libevent 前必须初始化线程支持，否则 event_base 不是线程安全的。
   evthread_use_pthreads();
-  // 创建一个event_base对象，这个对象是libevent的主要对象，所有的事件都会注册到这个对象中
+  // event_base 是所有连接事件的归属地；后续每个 socket 的读事件都会挂到这里。
   event_base_ = event_base_new();
   if (nullptr == event_base_) {
     LOG_ERROR("failed to create event base");
     return RC::INTERNAL;
   }
 
-  // 创建线程池
-  // 这里写死了线程池的大小，实际上可以从配置文件中读取
+  // 线程池同时承载一个长期运行的 event loop 线程和若干个 SQL 工作线程。
+  // 这里写死了线程池大小，后续可以再配置化。
   int ret = executor_.init("SQL",  // name
                             2,     // core size
                             8,     // max size
@@ -111,9 +117,9 @@ void JavaThreadPoolThreadHandler::handle_event(EventCallbackAg *ag)
   我们这里在收到消息时就把它放到线程池中处理。
   */
 
-  // sql_handler 是一个回调函数
+  // sql_handler 真正运行在线程池工作线程中，避免阻塞 event loop 对其它连接的监听。
   auto sql_handler = [this, ag]() {
-    RC rc = sql_task_handler_.handle_event(ag->communicator); // 这里会有接收消息、处理请求然后返回结果一条龙服务
+    RC rc = sql_task_handler_.handle_event(ag->communicator); // 一次完整的“收包/执行/回包”闭环。
     if (RC::SUCCESS != rc) {
       LOG_WARN("failed to handle sql task. rc=%s", strrc(rc));
       this->close_connection(ag->communicator);
@@ -129,6 +135,7 @@ void JavaThreadPoolThreadHandler::handle_event(EventCallbackAg *ag)
     }
   };
   
+  // 只做异步派发，不等待结果返回；连接的串行性由“处理完后再重新注册事件”保证。
   executor_.execute(sql_handler);
 }
 
@@ -165,7 +172,7 @@ RC JavaThreadPoolThreadHandler::new_connection(Communicator *communicator)
   ag->ev = ev;
 
   lock_.lock();
-  event_map_[communicator] = ag;
+  event_map_[communicator] = ag;  // 保存 event 句柄，后续关闭连接时需要删除注册关系。
   lock_.unlock();
 
   int ret = event_add(ev, nullptr);
@@ -192,12 +199,12 @@ RC JavaThreadPoolThreadHandler::close_connection(Communicator *communicator)
     }
 
     ag = iter->second;
-    event_map_.erase(iter);
+    event_map_.erase(iter);  // 先从全局映射摘掉，避免其它线程再次命中这个连接。
   }
 
   if (ag->ev) {
-    event_del(ag->ev);  // 把当前事件从event_base中删除
-    event_free(ag->ev); // 释放event对象
+    event_del(ag->ev);  // 把当前事件从 event_base 中删除，阻止后续继续触发回调。
+    event_free(ag->ev); // event 对象只属于当前连接，断开时一并释放。
     ag->ev = nullptr;
   }
   delete ag;
@@ -229,13 +236,14 @@ RC JavaThreadPoolThreadHandler::await_stop()
 {
   LOG_INFO("begin to await event base stopped");
   if (nullptr != event_base_) {
-    // 等待线程池中所有的任务处理完成
+    // 等待线程池中所有已提交任务处理完成，包括长期运行的 event loop 线程。
     executor_.await_termination();
     event_base_free(event_base_);
     event_base_ = nullptr;
   }
 
   for (auto kv : event_map_) {
+    // stop 之后 event loop 已经退出，这里清理由尚未主动断开的连接残留的 event/communicator。
     event_free(kv.second->ev);
     delete kv.second;
     delete kv.first;

@@ -22,6 +22,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/memory.h"
 
 /**
+ * @file log_entry.h
+ * @brief 定义通用日志头和日志记录对象。
+ */
+
+/**
  * @brief 描述一条日志头
  * @ingroup CLog
  */
@@ -67,6 +72,7 @@ public:
   static int32_t max_payload_size() { return max_size() - LogHeader::SIZE; }
 
 public:
+  /// @brief 初始化一条日志记录；payload 过大或模块非法时由实现返回错误。
   RC init(LSN lsn, LogModule::Id module_id, vector<char> &&data);
   RC init(LSN lsn, LogModule module, vector<char> &&data);
 

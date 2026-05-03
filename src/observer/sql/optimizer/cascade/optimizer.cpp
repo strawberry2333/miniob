@@ -12,6 +12,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/tasks/o_group_task.h"
 #include "sql/optimizer/cascade/memo.h"
 
+/**
+ * @file optimizer.cpp
+ * @brief 级联优化器主流程。
+ */
+
 std::unique_ptr<PhysicalOperator> Optimizer::optimize(OperatorNode* op_tree)
 {
   // Generate initial operator tree from query tree
@@ -45,6 +50,7 @@ std::unique_ptr<PhysicalOperator> Optimizer::choose_best_plan(int root_group_id)
   PhysicalOperator* winner_phys = dynamic_cast<PhysicalOperator*>(winner_contents);
   LOG_TRACE("winner: %d", winner_phys->type());
   for (const auto& child : winner->get_child_group_ids()) {
+    // winner 只记录孩子 group id，这里递归取各孩子 group 的 winner 拼回实体计划树。
     winner_phys->add_child(choose_best_plan(child));
   }
 
@@ -57,6 +63,7 @@ void Optimizer::optimize_loop(int root_group_id)
   context_->set_task_pool(task_stack);
 
   Memo &memo = context_->get_memo();
+  // 优化从根 group 开始，通过任务栈逐步扩展到表达式、规则和输入 group。
   task_stack->push(new OptimizeGroup(memo.get_group_by_id(root_group_id), context_.get()));
 
   execute_task_stack(task_stack, root_group_id, context_.get());

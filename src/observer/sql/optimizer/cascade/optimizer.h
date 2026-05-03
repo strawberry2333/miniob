@@ -16,6 +16,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/property_set.h"
 
 /**
+ * @file optimizer.h
+ * @brief 级联优化器入口。
+ */
+
+/**
  * @brief cascade optimizer
  * TODO: currently, Optimizer is used for CBO optimization. need to unify the optimizer in miniob
  */
@@ -24,8 +29,10 @@ class Optimizer
 public:
   Optimizer() : context_(std::make_unique<OptimizerContext>()) {}
 
+  /// @brief 将逻辑算子树优化成一棵最优物理计划树。
   std::unique_ptr<PhysicalOperator> optimize(OperatorNode *op_tree);
 
+  /// @brief 从 memo 的 winner 信息回溯构造最终物理计划。
   std::unique_ptr<PhysicalOperator> choose_best_plan(int root_id);
 
 private:

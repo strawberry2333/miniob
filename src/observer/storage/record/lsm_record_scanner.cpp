@@ -12,6 +12,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/common/codec.h"
 #include "storage/trx/lsm_mvcc_trx.h"
 
+/**
+ * @file lsm_record_scanner.cpp
+ * @brief 基于 ObLsm 范围迭代器的扫描实现。
+ */
+
 RC LsmRecordScanner::open_scan()
 {
   RC rc = RC::SUCCESS;
@@ -22,6 +27,7 @@ RC LsmRecordScanner::open_scan()
   if (trx_->type() == TrxKit::Type::VACUOUS) {
     lsm_iter_ = oblsm_->new_iterator(ObLsmReadOptions());
   } else if (trx_->type() == TrxKit::Type::LSM) {
+    // LSM 事务模式下必须从底层事务对象派生迭代器，才能看到当前事务自己的写集。
     auto lsm_trx = dynamic_cast<LsmMvccTrx *>(trx_);
     lsm_iter_ = lsm_trx->get_trx()->new_iterator(ObLsmReadOptions());
   }
@@ -31,6 +37,7 @@ RC LsmRecordScanner::open_scan()
     LOG_WARN("failed to encode table id");
     return rc;
   }
+  // 通过 table_id 前缀 seek 到当前表的首条记录，后续 next() 再以解码结果判断何时越界。
   lsm_iter_->seek(string_view((char *)encoded_key.data(), encoded_key.size()));
   tuple_.set_schema(table_, table_->table_meta().field_metas());
   return rc;
@@ -55,6 +62,7 @@ RC LsmRecordScanner::next(Record &record)
     bytes lsm_key_bytes(lsm_key.begin(), lsm_key.end());
     Codec::decode(lsm_key_bytes, table_id);
     if (table_id != table_->table_id()) {
+      // LSM 中不同表的键共存于同一有序空间，一旦跨出当前表前缀就结束扫描。
       LOG_TRACE("table id not match, table id: %ld", table_->table_id());
       return RC::RECORD_EOF;
     }

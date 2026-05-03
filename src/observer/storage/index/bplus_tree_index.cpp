@@ -17,6 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/table/table.h"
 #include "storage/db/db.h"
 
+/**
+ * @file bplus_tree_index.cpp
+ * @brief B+ 树索引对表记录接口的适配实现。
+ */
+
 BplusTreeIndex::~BplusTreeIndex() noexcept { close(); }
 
 RC BplusTreeIndex::create(Table *table, const char *file_name, const IndexMeta &index_meta, const FieldMeta &field_meta)

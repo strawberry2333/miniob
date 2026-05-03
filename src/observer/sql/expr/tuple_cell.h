@@ -16,6 +16,16 @@ See the Mulan PSL v2 for more details. */
 
 #include "storage/field/field_meta.h"
 
+/**
+ * @file tuple_cell.h
+ * @brief Tuple 列描述对象。
+ * @details `TupleCellSpec` 统一描述结果集中一个逻辑列的来源和展示名称，
+ * 用于 `Tuple::find_cell`、投影输出和聚合结果回填。
+ */
+
+/**
+ * @brief 标识 tuple 中某一列的来源和别名。
+ */
 class TupleCellSpec final
 {
 public:

@@ -21,6 +21,11 @@ See the Mulan PSL v2 for more details. */
 class LogicalOperator;
 
 /**
+ * @file rewriter.h
+ * @brief 基于规则的逻辑计划重写器。
+ */
+
+/**
  * @defgroup Rewriter
  * @brief 根据规则对逻辑计划进行重写
  * TODO: refactor with cascade optimizer
@@ -48,5 +53,6 @@ public:
   RC rewrite(unique_ptr<LogicalOperator> &oper, bool &change_made);
 
 private:
+  /// @brief 按注册顺序依次尝试的逻辑重写规则。
   vector<unique_ptr<RewriteRule>> rewrite_rules_;
 };

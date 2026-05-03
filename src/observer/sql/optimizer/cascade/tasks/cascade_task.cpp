@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/rules.h"
 #include "sql/optimizer/cascade/memo.h"
 
+/**
+ * @file cascade_task.cpp
+ * @brief 级联任务基类的上下文访问封装。
+ */
+
 Memo &CascadeTask::get_memo() const {return context_->get_memo(); }
 
 RuleSet &CascadeTask::get_rule_set() const { return context_->get_rule_set(); }

@@ -18,6 +18,13 @@ See the Mulan PSL v2 for more details. */
 #include "sql/parser/parse.h"
 
 /**
+ * @file join_physical_operator.h
+ * @brief 旧版嵌套循环连接算子声明。
+ * @details 该文件与 `nested_loop_join_physical_operator.h` 存在功能重叠，
+ * 当前代码路径主要使用后者；这里仍保留说明，便于维护历史实现。
+ */
+
+/**
  * @brief 最简单的两表（称为左表、右表）join算子
  * @details 依次遍历左表的每一行，然后关联右表的每一行
  * @ingroup PhysicalOperator

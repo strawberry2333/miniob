@@ -20,12 +20,18 @@ class Trx;
 class DeleteStmt;
 
 /**
+ * @file delete_physical_operator.h
+ * @brief 删除物理算子声明。
+ */
+
+/**
  * @brief 物理算子，删除
  * @ingroup PhysicalOperator
  */
 class DeletePhysicalOperator : public PhysicalOperator
 {
 public:
+  /// @brief 绑定待删除记录所属的表。
   DeletePhysicalOperator(Table *table) : table_(table) {}
 
   virtual ~DeletePhysicalOperator() = default;

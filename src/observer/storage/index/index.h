@@ -25,6 +25,11 @@ See the Mulan PSL v2 for more details. */
 class IndexScanner;
 
 /**
+ * @file index.h
+ * @brief 定义索引抽象接口与扫描器接口。
+ */
+
+/**
  * @brief 索引
  * @defgroup Index
  * @details 索引可能会有很多种实现，比如B+树、哈希表等，这里定义了一个基类，用于描述索引的基本操作。
@@ -89,6 +94,7 @@ public:
   virtual RC sync() = 0;
 
 protected:
+  /// @brief 保存索引和字段元信息，供具体索引实现复用。
   RC init(const IndexMeta &index_meta, const FieldMeta &field_meta);
 
 protected:
@@ -106,10 +112,7 @@ public:
   IndexScanner()          = default;
   virtual ~IndexScanner() = default;
 
-  /**
-   * 遍历元素数据
-   * 如果没有更多的元素，返回RECORD_EOF
-   */
+  /// @brief 遍历下一条索引项；没有更多数据时返回 `RECORD_EOF`。
   virtual RC next_entry(RID *rid) = 0;
   virtual RC destroy()            = 0;
 };

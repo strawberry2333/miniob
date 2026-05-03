@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/composite_tuple.h"
 
 /**
+ * @file hash_group_by_physical_operator.h
+ * @brief 行式分组聚合算子。
+ */
+
+/**
  * @brief Group By Hash 方式物理算子
  * @ingroup PhysicalOperator
  * @details 通过 hash 的方式进行 group by 操作。当聚合函数存在 group by
@@ -47,6 +52,7 @@ private:
   using GroupType = tuple<ValueListTuple, GroupValueType>;
 
 private:
+  /// @brief 根据当前输入行的 group key 定位或创建分组状态。
   RC find_group(const Tuple &child_tuple, GroupType *&found_group);
 
 private:

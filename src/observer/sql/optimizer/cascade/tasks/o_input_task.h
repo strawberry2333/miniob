@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/property_set.h"
 
 /**
+ * @file o_input_task.h
+ * @brief 物理表达式输入优化任务声明。
+ */
+
+/**
  * OptimizeInputs
  */
 class OptimizeInputs : public CascadeTask
@@ -37,6 +42,7 @@ public:
 private:
   GroupExpr *group_expr_;
 
+  /// @brief 当前物理表达式已经累计的总代价。
   double cur_total_cost_;
 
   /**

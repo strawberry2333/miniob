@@ -25,12 +25,18 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file execute_stage.cpp
+ * @brief 实现 SQL 流水线中的执行阶段。
+ */
+
 RC ExecuteStage::handle_request(SQLStageEvent *sql_event)
 {
   RC rc = RC::SUCCESS;
 
   const unique_ptr<PhysicalOperator> &physical_operator = sql_event->physical_operator();
   if (physical_operator != nullptr) {
+    // 查询类语句通常已经生成了物理算子树，执行阶段只需要把它交给 `SqlResult` 管理。
     return handle_request_with_physical_operator(sql_event);
   }
 
@@ -38,6 +44,7 @@ RC ExecuteStage::handle_request(SQLStageEvent *sql_event)
 
   Stmt *stmt = sql_event->stmt();
   if (stmt != nullptr) {
+    // 没有物理算子的语句交给命令执行器，例如 DDL、事务控制和 HELP 等。
     CommandExecutor command_executor;
     rc = command_executor.execute(sql_event);
     session_event->sql_result()->set_return_code(rc);
@@ -54,6 +61,7 @@ RC ExecuteStage::handle_request_with_physical_operator(SQLStageEvent *sql_event)
   unique_ptr<PhysicalOperator> &physical_operator = sql_event->physical_operator();
   ASSERT(physical_operator != nullptr, "physical operator should not be null");
 
+  // `SqlResult` 在返回客户端时负责驱动算子 open/next/close，这里只转移所有权。
   SqlResult *sql_result = sql_event->session_event()->sql_result();
   sql_result->set_operator(std::move(physical_operator));
   return rc;

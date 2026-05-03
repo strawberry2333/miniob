@@ -14,6 +14,11 @@ See the Mulan PSL v2 for more details. */
 #include "storage/common/meta_util.h"
 #include "common/lang/filesystem.h"
 
+/**
+ * @file meta_util.cpp
+ * @brief 元数据与数据文件命名辅助函数实现。
+ */
+
 string db_meta_file(const char *base_dir, const char *db_name)
 {
   filesystem::path db_dir = filesystem::path(base_dir);

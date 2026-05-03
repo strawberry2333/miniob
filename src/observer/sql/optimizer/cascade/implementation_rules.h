@@ -13,6 +13,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/optimizer/cascade/rules.h"
 
 /**
+ * @file implementation_rules.h
+ * @brief 逻辑节点到物理节点的实现规则集合。
+ */
+
+/**
  * Rule transforms Logical Scan -> Physical Scan
  */
 class LogicalGetToPhysicalSeqScan : public Rule

@@ -25,6 +25,11 @@ See the Mulan PSL v2 for more details. */
 class LogEntry;
 
 /**
+ * @file log_file.h
+ * @brief 定义日志文件读写器及目录管理器。
+ */
+
+/**
  * @brief 负责处理一个日志文件，包括读取和写入
  * @ingroup CLog
  * @details 日志文件中的日志是按照LSN从小到大排列的
@@ -38,6 +43,7 @@ public:
   RC open(const char *filename);
   RC close();
 
+  /// @brief 按 LSN 顺序遍历日志文件内容。
   RC iterate(function<RC(LogEntry &)> callback, LSN start_lsn = 0);
 
 private:

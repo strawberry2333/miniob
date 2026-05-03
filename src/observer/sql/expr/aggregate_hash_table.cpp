@@ -11,11 +11,16 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/aggregate_hash_table.h"
 #include "sql/expr/aggregate_state.h"
 
+/**
+ * @file aggregate_hash_table.cpp
+ * @brief 聚合哈希表的写入、扫描与实验性 SIMD 路径实现。
+ */
+
 // ----------------------------------StandardAggregateHashTable------------------
 
 RC StandardAggregateHashTable::add_chunk(Chunk &groups_chunk, Chunk &aggrs_chunk)
 {
-    if (groups_chunk.rows() != aggrs_chunk.rows()) {
+  if (groups_chunk.rows() != aggrs_chunk.rows()) {
     LOG_WARN("groups_chunk and aggrs_chunk have different rows: %d, %d", groups_chunk.rows(), aggrs_chunk.rows());
     return RC::INVALID_ARGUMENT;
   }
@@ -24,12 +29,14 @@ RC StandardAggregateHashTable::add_chunk(Chunk &groups_chunk, Chunk &aggrs_chunk
     vector<void*> aggr_values;
 
     for (int j = 0; j < groups_chunk.column_num(); j++) {
+      // 为当前行构造完整的 group key，作为哈希表查找和插入的依据。
       group_by_values.emplace_back(groups_chunk.get_value(j, i));
     }
 
     auto it = aggr_values_.find(group_by_values);
     if (it == aggr_values_.end()) {
       for (size_t j = 0; j < aggr_types_.size(); j++) {
+        // 首次见到该分组时，为每个聚合表达式建立独立状态对象。
         void * state_ptr = create_aggregate_state(aggr_types_[j], aggr_child_types_[j]);
         if (state_ptr == nullptr) {
           LOG_WARN("create aggregate state failed");
@@ -41,6 +48,7 @@ RC StandardAggregateHashTable::add_chunk(Chunk &groups_chunk, Chunk &aggrs_chunk
     }
     auto &aggr = aggr_values_.find(group_by_values)->second;
     for (size_t aggr_idx = 0; aggr_idx < aggr.size(); aggr_idx++) {
+      // group key 确认后，按聚合表达式顺序逐个吸收当前行的输入值。
       RC rc = aggregate_state_update_by_value(aggr[aggr_idx], aggr_types_[aggr_idx], aggr_child_types_[aggr_idx], aggrs_chunk.get_value(aggr_idx, i));
       if (rc != RC::SUCCESS) {
         LOG_WARN("update aggregate state failed");
@@ -70,6 +78,7 @@ RC StandardAggregateHashTable::Scanner::next(Chunk &output_chunk)
       auto col_idx = output_chunk.column_ids(i);
       if (col_idx >= static_cast<int>(group_by_values.size())) {
         int aggr_real_idx = col_idx - group_by_values.size();
+        // 输出列编号先映射到“group key 还是聚合列”，再把聚合状态 finalize 到目标列。
         rc = finialize_aggregate_state(aggrs[aggr_real_idx], hash_table_->aggr_types_[aggr_real_idx],
                                        hash_table_->aggr_child_types_[aggr_real_idx], output_chunk.column(i));
         if (rc != RC::SUCCESS) {
@@ -96,6 +105,7 @@ size_t StandardAggregateHashTable::VectorHash::operator()(const vector<Value> &v
 {
   size_t hash_val = 0;
   for (const auto &elem : vec) {
+    // 先把每个 SQL 值规约成字符串，再组合哈希，便于兼容多种类型的 group key。
     hash_val ^= hash<string>()(elem.to_string());
   }
   return hash_val;
@@ -257,6 +267,7 @@ void LinearProbingAggregateHashTable<V>::add_batch(int *input_keys, V *input_val
   // your code here
   exit(-1);
 
+  // 下面的注释描述了预期的 SIMD 任务流，帮助后续补全实现时理解状态机含义。
   // inv (invalid) 表示是否有效，inv[i] = -1 表示有效，inv[i] = 0 表示无效。
   // key[SIMD_WIDTH],value[SIMD_WIDTH] 表示当前循环中处理的键值对。
   // off (offset) 表示线性探测冲突时的偏移量，key[i] 每次遇到冲突键，则off[i]++，如果key[i] 已经完成聚合，则off[i] = 0，

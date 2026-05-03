@@ -28,15 +28,25 @@ See the Mulan PSL v2 for more details. */
 namespace common {
 
 /**
- * @brief 模拟java ThreadPoolExecutor 做一个简化的线程池
+ * @brief 模拟 Java ThreadPoolExecutor 的一个简化线程池
  * @defgroup ThreadPool
- * @details 一个线程池包含一个任务队列和一组线程，当有任务提交时，线程池会从任务队列中取出任务分配给一个线程执行。
- * 这里的接口设计参考了Java的线程池ThreadPoolExecutor，但是简化了很多。
+ * @details 线程池由两部分组成：
+ * 1. 一个任务队列，用来缓存尚未执行的任务；
+ * 2. 一组工作线程，用来持续从队列中取任务并执行。
  *
- * 这个线程池支持自动伸缩。
- * 线程分为两类，一类是核心线程，一类是普通线程。核心线程不会退出，普通线程会在空闲一段时间后退出。
- * 线程池有一个任务队列，收到的任务会放到任务队列中。当任务队列中任务的个数比当前线程个数多时，就会
- * 创建新的线程。
+ * 这里的接口设计参考了 Java 的 ThreadPoolExecutor，但实现做了明显简化：
+ * 1. 只保留最核心的提交、扩容、关闭、等待退出能力；
+ * 2. 不支持拒绝策略、自定义线程工厂、future 返回值等高级特性；
+ * 3. 任务调度策略也比较直接，优先保证实现易懂。
+ *
+ * 线程池支持自动伸缩：
+ * 1. 核心线程会在 init 阶段预先创建，并长期存活；
+ * 2. 非核心线程只在任务堆积时按需创建；
+ * 3. 非核心线程在空闲超过 keep_alive_time_ms 后会自行退出。
+ *
+ * 当前扩容策略比较朴素：
+ * 当队列里的待执行任务数大于“当前线程数 - 活跃线程数”时，说明空闲线程可能不够用，
+ * 线程池会尝试再创建一个非核心线程。
  *
  * TODO 任务execute接口，增加一个future返回值，可以获取任务的执行结果
  */
@@ -44,6 +54,11 @@ class ThreadPoolExecutor
 {
 public:
   ThreadPoolExecutor() = default;
+  /**
+   * @brief 析构时兜底关闭线程池
+   * @details 如果调用方忘记显式调用 shutdown/await_termination，
+   * 析构函数会主动触发一次关闭流程，尽量避免后台线程泄漏。
+   */
   virtual ~ThreadPoolExecutor();
 
   /**
@@ -69,27 +84,31 @@ public:
       unique_ptr<Queue<unique_ptr<Runnable>>> &&work_queue);
 
   /**
-   * @brief 提交一个任务，不一定可以立即执行
+   * @brief 提交一个 Runnable 任务，不一定会立刻执行
    *
-   * @param task 任务
-   * @return int 成功放入队列返回0
+   * @param task 待执行任务，所有权会转移到线程池
+   * @return int 成功入队返回 0，失败返回非 0
    */
   int execute(unique_ptr<Runnable> &&task);
 
   /**
-   * @brief 提交一个任务，不一定可以立即执行
+   * @brief 提交一个普通可调用对象，不一定会立刻执行
    *
-   * @param callable 任务
-   * @return int 成功放入队列返回0
+   * @param callable 会被包装成 RunnableAdaptor 后交给线程池
+   * @return int 成功入队返回 0，失败返回非 0
    */
   int execute(const function<void()> &callable);
 
   /**
-   * @brief 关闭线程池
+   * @brief 发起关闭流程
+   * @details 关闭后不再接收新任务，但已经入队的任务仍会继续执行，
+   * 工作线程会在队列清空后自行退出。
    */
   int shutdown();
   /**
    * @brief 等待线程池处理完所有任务并退出
+   * @details 该函数依赖工作线程在退出时主动从 threads_ 中移除自己，
+   * 因此它本质上是在轮询线程池是否已经清空。
    */
   int await_termination();
 
@@ -124,62 +143,65 @@ private:
   /**
    * @brief 创建一个线程
    *
-   * @param core_thread 是否是核心线程
+   * @param core_thread 是否创建为核心线程
    */
   int create_thread(bool core_thread);
   /**
-   * @brief 创建一个线程。调用此函数前已经加锁
+   * @brief 在已持锁的前提下创建一个线程
    *
-   * @param core_thread 是否是核心线程
+   * @param core_thread 是否创建为核心线程
    */
   int create_thread_locked(bool core_thread);
   /**
-   * @brief 检测是否需要扩展线程，如果需要就扩展
+   * @brief 根据当前排队任务和线程空闲情况决定是否扩容
    */
   int extend_thread();
 
 private:
   /**
-   * @brief 线程函数。从队列中拉任务并执行
+   * @brief 工作线程主循环
+   * @details 线程启动后会不断从任务队列拉取任务执行。
+   * 核心线程会一直存活到线程池关闭；
+   * 非核心线程会在空闲超时后退出。
    */
   void thread_func();
 
 private:
   /**
-   * @brief 线程池的状态
+   * @brief 线程池生命周期状态
    */
   enum class State
   {
-    NEW,          //! 新建状态
-    RUNNING,      //! 正在运行
-    TERMINATING,  //! 正在停止
-    TERMINATED    //! 已经停止
+    NEW,          //! 已构造但尚未 init
+    RUNNING,      //! 正常运行，可接收新任务
+    TERMINATING,  //! 已发起关闭，不再接收新任务，等待队列清空
+    TERMINATED    //! 全部工作线程已退出
   };
 
   struct ThreadData
   {
-    bool    core_thread = false;    /// 是否是核心线程
-    bool    idle        = false;    /// 是否空闲
-    bool    terminated  = false;    /// 是否已经退出
-    thread *thread_ptr  = nullptr;  /// 线程指针
+    bool    core_thread = false;    /// 是否为核心线程。核心线程不会因空闲超时退出
+    bool    idle        = false;    /// 线程当前是否空闲。仅用于粗粒度状态描述
+    bool    terminated  = false;    /// 线程是否已走到退出流程
+    thread *thread_ptr  = nullptr;  /// 对应的 std::thread 对象，在线程退出时负责回收
   };
 
 private:
-  State state_ = State::NEW;  /// 线程池状态
+  State state_ = State::NEW;  /// 线程池当前状态
 
-  int                  core_pool_size_ = 0;  /// 核心线程个数
-  int                  max_pool_size_  = 0;  /// 最大线程个数
-  chrono::milliseconds keep_alive_time_ms_;  /// 非核心线程空闲多久后退出
+  int                  core_pool_size_ = 0;  /// 期望长期保留的核心线程数
+  int                  max_pool_size_  = 0;  /// 线程池允许扩到的最大线程数
+  chrono::milliseconds keep_alive_time_ms_;  /// 非核心线程空闲多久后可以退出
 
-  unique_ptr<Queue<unique_ptr<Runnable>>> work_queue_;  /// 任务队列
+  unique_ptr<Queue<unique_ptr<Runnable>>> work_queue_;  /// 待执行任务队列
 
-  mutable mutex               lock_;     /// 保护线程池内部数据的锁
-  map<thread::id, ThreadData> threads_;  /// 线程列表
+  mutable mutex               lock_;     /// 保护 threads_ 等共享状态
+  map<thread::id, ThreadData> threads_;  /// 线程 id 到线程元数据的映射
 
-  int             largest_pool_size_ = 0;  /// 历史上达到的最大的线程个数
-  atomic<int64_t> task_count_        = 0;  /// 处理过的任务个数
-  atomic<int>     active_count_      = 0;  /// 活跃线程个数
-  string          pool_name_;              /// 线程池名称
+  int             largest_pool_size_ = 0;  /// 历史上达到过的最大线程数
+  atomic<int64_t> task_count_        = 0;  /// 已执行完成的任务总数
+  atomic<int>     active_count_      = 0;  /// 当前正在执行任务的线程数
+  string          pool_name_;              /// 线程池名称，用于日志和线程命名
 };
 
 }  // namespace common

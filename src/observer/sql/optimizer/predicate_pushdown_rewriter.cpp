@@ -18,6 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/logical_operator.h"
 #include "sql/operator/table_get_logical_operator.h"
 
+/**
+ * @file predicate_pushdown_rewriter.cpp
+ * @brief 谓词下推到 `TABLE_GET` 的实现。
+ */
+
 RC PredicatePushdownRewriter::rewrite(unique_ptr<LogicalOperator> &oper, bool &change_made)
 {
   RC rc = RC::SUCCESS;
@@ -60,6 +65,7 @@ RC PredicatePushdownRewriter::rewrite(unique_ptr<LogicalOperator> &oper, bool &c
 
   if (!pushdown_exprs.empty()) {
     change_made = true;
+    // 下推表达式的所有权转交给 `TABLE_GET`，后续物理计划生成会据此选择扫描策略。
     table_get_oper->set_predicates(std::move(pushdown_exprs));
   }
   return rc;
@@ -112,6 +118,7 @@ RC PredicatePushdownRewriter::get_exprs_can_pushdown(
       }
 
       if (!*iter) {
+        // 已经完整下推的子表达式会从原谓词树中移除，避免执行阶段重复判断。
         iter = child_exprs.erase(iter);
       } else {
         ++iter;

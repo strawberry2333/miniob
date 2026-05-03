@@ -20,6 +20,14 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/logical_operator.h"
 #include "sql/optimizer/rewrite_rule.h"
 
+/**
+ * @file expression_rewriter.h
+ * @brief 表达式级重写器。
+ */
+
+/**
+ * @brief 在逻辑计划的表达式树上递归应用局部简化规则。
+ */
 class ExpressionRewriter : public RewriteRule
 {
 public:
@@ -29,6 +37,7 @@ public:
   RC rewrite(unique_ptr<LogicalOperator> &oper, bool &change_made) override;
 
 private:
+  /// @brief 深度优先改写单个表达式节点及其子树。
   RC rewrite_expression(unique_ptr<Expression> &expr, bool &change_made);
 
 private:

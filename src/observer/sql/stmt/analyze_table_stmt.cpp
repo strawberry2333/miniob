@@ -11,8 +11,14 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/analyze_table_stmt.h"
 #include "storage/db/db.h"
 
+/**
+ * @file analyze_table_stmt.cpp
+ * @brief 实现 `ANALYZE TABLE` 的语义绑定。
+ */
+
 RC AnalyzeTableStmt::create(Db *db, const AnalyzeTableSqlNode &analyze_table, Stmt *&stmt)
 {
+  // resolve 阶段先确认目标表存在，执行阶段就可以专注于统计逻辑。
   if (db->find_table(analyze_table.relation_name.c_str()) == nullptr) {
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }

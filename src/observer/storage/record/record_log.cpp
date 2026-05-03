@@ -27,6 +27,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
+/**
+ * @file record_log.cpp
+ * @brief 记录页 WAL 的编码、刷盘前置与重放实现。
+ */
+
 // class RecordOperation
 
 string RecordOperation::to_string() const
@@ -98,12 +103,14 @@ RC RecordLogHandler::init_new_page(Frame *frame, PageNum page_num, span<const ch
   header->storage_format  = static_cast<int>(storage_format_);
   header->column_num      = data.size() / sizeof(int);
   if (data.size() > 0) {
+    // PAX 页需要把列偏移索引一并持久化；行存格式这里通常为空。
     memcpy(log_payload.data() + RecordLogHeader::SIZE, data.data(), data.size());
   }
 
   LSN lsn = 0;
   RC  rc  = log_handler_->append(lsn, LogModule::Id::RECORD_MANAGER, std::move(log_payload));
   if (OB_SUCC(rc) && lsn > 0) {
+    // 把最新日志位置写回页面，后续恢复时可直接跳过已经覆盖到该 LSN 的页。
     frame->set_lsn(lsn);
   }
   return rc;
@@ -208,6 +215,7 @@ RC RecordLogReplayer::replay(const LogEntry &entry)
   const LSN frame_lsn = frame->lsn();
 
   if (frame_lsn >= entry.lsn()) {
+    // 该页已经被更新到不早于当前日志的位置，重复重放会破坏幂等性，因此直接跳过。
     LOG_TRACE("page %d has been initialized, skip replaying record log. frame lsn %d, log lsn %d", 
               log_header->page_num, frame_lsn, entry.lsn());
     return RC::SUCCESS;
