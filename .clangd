@@ -1,0 +1,11 @@
+CompileFlags:
+  Add:
+    # 项目根目录及源码目录，与 compile_commands.json 中的 -I 保持一致
+    - -I.
+    - -Isrc
+    - -Isrc/observer
+    - -Ideps
+    - -Ideps/3rd/usr/local/include
+    # Google Benchmark IDE stub，仅供静态分析，不参与实际编译
+    - -Ideps/benchmark_stub/include
+    - -std=c++20
