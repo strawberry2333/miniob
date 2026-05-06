@@ -16,22 +16,17 @@ class ObComparator;
 class ObLsmIterator;
 
 /**
- * @brief Creates a new user iterator wrapping the given LSM iterator.
+ * @brief 基于内部迭代器构造“用户视角”的迭代器。
  *
- * @detail This function takes an existing LSM iterator (`ObLsmIterator`) and wraps it to create
- * a user-level iterator. The new iterator is initialized with a specific sequence number (`seq`),
- * which determines the context or version visibility of the iterator.
+ * 内部迭代器通常输出的是按 internal key 排序的数据流，其中包含：
+ * - 同一个 user key 的多个历史版本；
+ * - value 为空的删除标记；
+ * - 来自 MemTable、Immutable MemTable、SSTable 的混合数据。
  *
- * @param iterator The original `ObLsmIterator` to be wrapped.
- * @param seq The sequence number to associate with the new user iterator.
- *
- * @return A pointer to the newly created `ObLsmIterator` instance that acts as a user iterator.
- *
- * @note The caller is responsible for managing the memory of the returned iterator and
- *       ensuring that it is properly deleted after use to prevent memory leaks.
- *
- * @warning Passing a `nullptr` as the `iterator` parameter will result in undefined behavior.
- *          Ensure that a valid iterator is provided before calling this function.
+ * UserIterator 的职责就是把这条内部流转换成上层真正想看到的结果：
+ * - 只保留 `seq` 可见范围内的版本；
+ * - 同一个 user key 只返回最新可见版本；
+ * - 遇到 tombstone 时跳过该 key。
  */
 ObLsmIterator *new_user_iterator(ObLsmIterator *iterator, uint64_t seq);
 

@@ -22,7 +22,10 @@ See the Mulan PSL v2 for more details. */
 namespace oceanbase {
 
 /**
- * @brief Build a SSTable
+ * @brief SSTable 构造器。
+ *
+ * 它负责把有序的 MemTable 迭代结果切分成多个 block，并最终落成一个 SSTable 文件。
+ * 生成过程中会同步维护 `BlockMeta`，供后续查找时做块级定位。
  */
 class ObSSTableBuilder
 {
@@ -33,24 +36,20 @@ public:
   ~ObSSTableBuilder() = default;
 
   /**
-   * @brief Builds an SSTable from the provided in-memory table and stores it in a file.
+   * @brief 把一个 MemTable 刷成磁盘 SSTable。
    *
-   * This function takes an `ObMemTable` as input, partitions the data into blocks,
-   * serializes the blocks, and writes them into an SSTable file.
-   *
-   * @param mem_table A shared pointer to the `ObMemTable` containing the data to be written into the SSTable.
-   * @param file_name The name of the file where the constructed SSTable will be stored.
-   * @param sst_id A unique identifier assigned to the created SSTable.
-   *
-   * @return RC A result code indicating the success or failure of the SSTable creation process.
-   *
+   * 输入必须已经按 internal key 有序，这样输出文件天然有序，
+   * 后续读路径和 compaction 才能复用有序归并逻辑。
    */
   RC                    build(shared_ptr<ObMemTable> mem_table, const string &file_name, uint32_t sst_id);
   size_t                file_size() const { return file_size_; }
+  // 基于已落盘文件返回可直接参与读/compaction 的 SSTable 对象。
   shared_ptr<ObSSTable> get_built_table();
+  // 清理构造状态，准备复用 builder。
   void                  reset();
 
 private:
+  // 把当前 block_builder_ 中的数据冲刷到文件，并生成一条 BlockMeta。
   void finish_build_block();
 
   const ObComparator      *comparator_ = nullptr;

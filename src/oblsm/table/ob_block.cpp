@@ -16,11 +16,18 @@ namespace oceanbase {
 
 RC ObBlock::decode(const string &data)
 {
+  // TODO: 当前 block 解码尚未实现。
+  // 未来应按 `ObBlockBuilder::finish()` 的输出格式恢复：
+  // 1. 末尾 data_start；
+  // 2. offset 数量；
+  // 3. offset 数组；
+  // 4. entry 数据区。
   return RC::UNIMPLEMENTED;
 }
 
 string_view ObBlock::get_entry(uint32_t offset) const
 {
+  // 根据 offset 表取出第 offset 条 entry 的字节区间。
   uint32_t    curr_begin = offsets_[offset];
   uint32_t    curr_end   = offset == offsets_.size() - 1 ? data_.size() : offsets_[offset + 1];
   string_view curr       = string_view(data_.data() + curr_begin, curr_end - curr_begin);
@@ -31,6 +38,7 @@ ObLsmIterator *ObBlock::new_iterator() const { return new BlockIterator(comparat
 
 void BlockIterator::parse_entry()
 {
+  // entry 布局：| key_size | key | value_size | value |
   curr_entry_         = data_->get_entry(index_);
   uint32_t key_size   = get_numeric<uint32_t>(curr_entry_.data());
   key_                = string_view(curr_entry_.data() + sizeof(uint32_t), key_size);
@@ -40,6 +48,8 @@ void BlockIterator::parse_entry()
 
 string BlockMeta::encode() const
 {
+  // block meta 需要记住首尾 key 和块在文件中的位置信息，
+  // 这样 TableIterator 才能先靠 meta 做粗粒度定位，再真正读 block。
   string ret;
   put_numeric<uint32_t>(&ret, first_key_.size());
   ret.append(first_key_);
@@ -70,8 +80,10 @@ RC BlockMeta::decode(const string &data)
 
 void BlockIterator::seek(const string_view &lookup_key)
 {
+   // 当前实现是线性扫描；块不大时实现最简单。
+   // 后续可以利用块内有序性改成二分查找。
    index_ = 0;
-   while(valid()) {
+   while (valid()) {
     parse_entry();
     if (comparator_->compare(extract_user_key(key_), extract_user_key_from_lookup_key(lookup_key)) >= 0) {
       break;

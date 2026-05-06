@@ -19,6 +19,7 @@ namespace oceanbase {
 
 RC ObManifestSSTableInfo::from_json(const Json::Value &v)
 {
+  // 恢复时要求字段完整存在，否则宁可失败也不要接受损坏的元数据。
   if (v.isMember("sstable_id") && v["sstable_id"].isInt()) {
     sstable_id = v["sstable_id"].asInt();
   } else {
@@ -35,6 +36,7 @@ RC ObManifestSSTableInfo::from_json(const Json::Value &v)
 
 Json::Value ObManifestCompaction::to_json() const
 {
+  // 一条 compaction record 完整描述“删了哪些表、加了哪些表”。
   Json::Value v;
   v["record_type"]     = Json::Value{ObManifestCompaction::record_type()};
   v["compaction_type"] = JsonConverter::to_json(compaction_type);
@@ -60,7 +62,7 @@ RC ObManifestCompaction::from_json(const Json::Value &v)
 {
   RC rc = RC::SUCCESS;
 
-  // Check the "type" field
+  // 先恢复 compaction 策略类型。
   if (!v.isMember("compaction_type")) {
     return RC::JSON_MEMBER_MISSING;
   }
@@ -70,7 +72,7 @@ RC ObManifestCompaction::from_json(const Json::Value &v)
     return rc;
   }
 
-  // Check "deleted_tables"
+  // 恢复本次 compaction 删除的 SSTable 集合。
   if (!v.isMember("deleted_tables") || !v["deleted_tables"].isArray()) {
     return RC::JSON_MEMBER_MISSING;
   }
@@ -84,7 +86,7 @@ RC ObManifestCompaction::from_json(const Json::Value &v)
     deleted_tables.push_back(std::move(info));
   }
 
-  // Check "added_tables"
+  // 恢复本次 compaction 新增的 SSTable 集合。
   if (!v.isMember("added_tables") || !v["added_tables"].isArray()) {
     return RC::JSON_MEMBER_MISSING;
   }
@@ -98,14 +100,14 @@ RC ObManifestCompaction::from_json(const Json::Value &v)
     added_tables.push_back(std::move(info));
   }
 
-  // Check "sstable_sequence_id"
+  // 恢复当时全局的 SSTable 编号上界。
   if (v.isMember("sstable_sequence_id") && v["sstable_sequence_id"].isUInt64()) {
     sstable_sequence_id = v["sstable_sequence_id"].asUInt64();
   } else {
     return RC::JSON_MEMBER_MISSING;
   }
 
-  // Check "seq_id"
+  // 恢复当时已经持久化的最新写序列号。
   if (v.isMember("seq_id") && v["seq_id"].isUInt64()) {
     seq_id = v["seq_id"].asUInt64();
   } else {
@@ -117,6 +119,7 @@ RC ObManifestCompaction::from_json(const Json::Value &v)
 
 Json::Value ObManifestSnapshot::to_json() const
 {
+  // 快照记录的是“一个时刻的全量视图”，不是增量变化。
   Json::Value root;
   root["record_type"] = Json::Value{ObManifestSnapshot::record_type()};
   root["seq"]         = seq;
@@ -176,6 +179,7 @@ RC ObManifest::open()
 {
   string current_path_str = current_path_.generic_string();
   if (filesystem::exists(current_path_)) {
+    // 已存在 CURRENT，说明目录里曾经初始化过 LSM，先找到当前生效的 Manifest。
     reader_ = ObFileReader::create_file_reader(current_path_str);
     RC rc   = reader_->open_file();
     if (rc != RC::SUCCESS) {
@@ -199,6 +203,7 @@ RC ObManifest::open()
     }
 
   } else {
+    // 首次初始化目录：创建 CURRENT 和第一个空 Manifest。
     mf_seq_                  = 0;
     string current_file_data = std::to_string(mf_seq_);
     string mf_file           = get_manifest_file_path(path_, mf_seq_);
@@ -224,6 +229,7 @@ RC ObManifest::open()
       return RC::IOERR_OPEN;
     }
 
+    // 初始化时默认活跃 memtable_id 为 0，对应后续第一个 WAL。
     ObManifestNewMemtable memtable_record;
     memtable_record.memtable_id = 0;
     RC rc                       = push(memtable_record);
@@ -252,6 +258,7 @@ RC ObManifest::recover(std::unique_ptr<ObManifestSnapshot> &snapshot_record,
     return rc;
   }
 
+  // Manifest 是顺序 append 的，恢复时按记录顺序从头扫到尾即可。
   while (file_size > pos) {
     string len_str = reader_->read_pos(pos, sizeof(len));
     memcpy(&len, len_str.data(), sizeof(len));
@@ -259,7 +266,7 @@ RC ObManifest::recover(std::unique_ptr<ObManifestSnapshot> &snapshot_record,
     ASSERT(len > 0, "len %d should be greater than 0", len);
     string json_raw = reader_->read_pos(pos, static_cast<uint32_t>(len));
     pos += json_raw.size();
-    // Parse from json
+    // 先把一条完整 JSON 记录读出来，再根据 record_type 分发到不同对象。
     Json::Reader reader;
     Json::Value  json_val;
     bool         ok = reader.parse(json_raw, json_val);
@@ -278,8 +285,10 @@ RC ObManifest::recover(std::unique_ptr<ObManifestSnapshot> &snapshot_record,
         LOG_ERROR("Failed to convert from JSON to compaction record. JSON %s", json_val.toStyledString().c_str());
         return rc;
       }
+      // compaction record 需要按原始顺序保留，后续统一回放。
       records.emplace_back(std::move(compaction_record));
     } else if (record_type == ObManifestNewMemtable::record_type()) {
+      // 只关心最后一条 NewMemtable 记录，因为它代表当前活跃 WAL。
       memtbale_record = std::make_unique<ObManifestNewMemtable>();
       rc              = JsonConverter::from_json(json_val, *memtbale_record);
       if (rc != RC::SUCCESS) {
@@ -287,6 +296,7 @@ RC ObManifest::recover(std::unique_ptr<ObManifestSnapshot> &snapshot_record,
         return rc;
       }
     } else if (record_type == ObManifestSnapshot::record_type()) {
+      // 同理，后出现的 snapshot 会覆盖之前的快照。
       snapshot_record = std::make_unique<ObManifestSnapshot>();
       rc              = JsonConverter::from_json(json_val, *snapshot_record);
       if (rc != RC::SUCCESS) {
@@ -307,7 +317,7 @@ RC ObManifest::redirect(const ObManifestSnapshot &snapshot, const ObManifestNewM
   auto   new_mf_file  = get_manifest_file_path(path_, mf_seq_);
   string current_file = path_ / "CURRENT";
   RC     rc           = RC::SUCCESS;
-  // Write to manifest file first
+  // 先把新 Manifest 文件写完整，再切换 CURRENT，避免中途崩溃导致 CURRENT 指向坏文件。
   writer_ = ObFileWriter::create_file_writer(new_mf_file, false);
   if (!writer_) {
     return RC::IOERR_OPEN;
@@ -324,7 +334,7 @@ RC ObManifest::redirect(const ObManifestSnapshot &snapshot, const ObManifestNewM
     return rc;
   }
 
-  // Write to CURRENT file
+  // CURRENT 是一个极小的“指针文件”，只存当前生效的 manifest 编号。
   auto current_writer = ObFileWriter::create_file_writer(current_file, false);
   rc                  = current_writer->write(std::to_string(mf_seq_));
   if (OB_FAIL(rc)) {
@@ -339,7 +349,7 @@ RC ObManifest::redirect(const ObManifestSnapshot &snapshot, const ObManifestNewM
   }
   current_writer->close_file();
 
-  // Delete previous manifest file
+  // 新文件切换成功后，旧 Manifest 即可删除。
   if (filesystem::exists(prev_mf_file)) {
     remove(prev_mf_file.c_str());
   }

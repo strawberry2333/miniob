@@ -18,7 +18,7 @@ See the Mulan PSL v2 for more details. */
 #include "oblsm/util/ob_lru_cache.h"
 
 namespace oceanbase {
-// TODO: add a dumptool to dump sst files(example for usage: ./dumptool sst_file)
+// TODO: 后续可以增加单独的 dumptool，把 SST 文件内容可视化输出。
 //    ┌─────────────────┐
 //    │    block 1      │◄──┐
 //    ├─────────────────┤   │
@@ -45,25 +45,21 @@ namespace oceanbase {
 
 /**
  * @class ObSSTable
- * @brief Represents an SSTable (Sorted String Table) in the LSM-Tree.
+ * @brief 磁盘上的只读有序表。
  *
- * The `ObSSTable` class is responsible for managing on-disk sorted string tables (SSTables).
- * It provides methods for initialization, key-value lookups, block reading (with caching support),
- * and creating iterators for traversal. Each SSTable is uniquely identified by an `sst_id_` and
- * interacts with the LRU cache for efficient block access.
+ * SSTable 是 MemTable flush 或 compaction 的结果，一旦生成后就不再原地修改。
+ * 当前类主要负责三件事：
+ * 1. 打开文件并解析 block meta；
+ * 2. 按 block 读取数据，并尽量命中 block cache；
+ * 3. 提供遍历接口，参与查询和 compaction。
  */
 class ObSSTable : public enable_shared_from_this<ObSSTable>
 {
 public:
   /**
-   * @brief Constructor for ObSSTable.
+   * @brief 构造一个 SSTable 文件视图对象。
    *
-   * Initializes an SSTable with its unique ID, file name, comparator, and block cache.
-   *
-   * @param sst_id A unique identifier for the SSTable.
-   * @param file_name The name of the file storing the SSTable data.
-   * @param comparator A pointer to the comparator used for key comparison.
-   * @param block_cache A pointer to the LRU block cache for caching block-level data.
+   * 构造函数本身不做 I/O，真正解析文件内容要等 `init()`。
    */
   ObSSTable(uint32_t sst_id, const string &file_name, const ObComparator *comparator,
       ObLRUCache<uint64_t, shared_ptr<ObBlock>> *block_cache)
@@ -79,12 +75,12 @@ public:
   ~ObSSTable() = default;
 
   /**
-   * @brief Initializes the SSTable instance.
+   * @brief 初始化 SSTable。
    *
-   * This function is responsible for performing setup tasks required for the SSTable,
-   * such as preparing file readers or pre-loading block_metas_.
-   *
-   * @warning This function must be called before performing any operations on the SSTable.
+   * 典型工作包括：
+   * - 打开文件；
+   * - 读取尾部 meta；
+   * - 恢复所有 block 的位置信息。
    */
   void init();
 
@@ -95,26 +91,12 @@ public:
   ObLsmIterator *new_iterator();
 
   /**
-   * @brief Reads a block from the SSTable using the block cache.
-   *
-   * Attempts to read the specified block using the block cache. If the block is not
-   * in the cache, it will load the block from the SSTable file and update the cache.
-   *
-   * @param block_idx The index of the block to read.
-   *
-   * @return shared_ptr<ObBlock> A shared pointer to the requested block.
+   * @brief 优先通过 block cache 读取指定 block。
    */
   shared_ptr<ObBlock> read_block_with_cache(uint32_t block_idx) const;
 
   /**
-   * @brief Reads a block directly from the SSTable file.
-   *
-   * This function bypasses the block cache and directly reads the requested block
-   * from the SSTable file.
-   *
-   * @param block_idx The index of the block to read.
-   *
-   * @return shared_ptr<ObBlock> A shared pointer to the requested block.
+   * @brief 绕过缓存直接从文件读取指定 block。
    */
   shared_ptr<ObBlock> read_block(uint32_t block_idx) const;
 
@@ -126,6 +108,7 @@ public:
 
   const ObComparator *comparator() const { return comparator_; }
 
+  // 删除 SSTable 对应的物理文件。
   void   remove();
   string first_key() const { return block_metas_.empty() ? "" : block_metas_[0].first_key_; }
   string last_key() const { return block_metas_.empty() ? "" : block_metas_.back().last_key_; }
@@ -155,6 +138,7 @@ public:
   string_view value() const override { return block_iterator_->value(); }
 
 private:
+  // 根据 curr_block_idx_ 装载当前 block，并构造块内迭代器。
   void read_block_with_cache();
 
   const shared_ptr<ObSSTable> sst_;
@@ -164,6 +148,7 @@ private:
   unique_ptr<ObLsmIterator>   block_iterator_;
 };
 
+// 外层 vector 表示 level / run，内层 vector 表示该层上的多个 SSTable。
 using SSTablesPtr = shared_ptr<vector<vector<shared_ptr<ObSSTable>>>>;
 
 }  // namespace oceanbase

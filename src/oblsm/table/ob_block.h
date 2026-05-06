@@ -17,7 +17,9 @@ See the Mulan PSL v2 for more details. */
 
 namespace oceanbase {
 
-// TODO: block align to 4KB
+// Block 是 SSTable 的最小读写单位。
+// 目前 block 尾部维护了一段 offset 数组，用于在单个 block 内快速定位 entry。
+// TODO: 后续可以考虑按 4KB 对齐，进一步贴近实际存储引擎的页组织方式。
 //      ┌─────────────────┐
 //      │    entry 1      │◄───┐
 //      ├─────────────────┤    │
@@ -39,12 +41,13 @@ namespace oceanbase {
 //      └─────────────────┘
 /**
  * @class ObBlock
- * @brief Represents a data block in the LSM-Tree.
+ * @brief SSTable 内的一个数据块。
  *
- * The `ObBlock` class manages a block of serialized key-value pairs, along with
- * their offsets, for efficient storage and retrieval. It provides methods to decode
- * serialized data, access individual entries, and create iterators for traversing
- * the block contents.
+ * 一个 block 内保存多个有序 entry，每个 entry 编码格式为：
+ * `| key_size(uint32_t) | key | value_size(uint32_t) | value |`
+ *
+ * block 自身在尾部还维护一份 offset 表，用于定位每条 entry 的起始位置。
+ * 因此 block 既兼顾了顺序遍历，也支持块内查找。
  */
 class ObBlock
 {
@@ -61,13 +64,9 @@ public:
   int size() const { return offsets_.size(); }
 
   /**
-   * @brief Decodes serialized block data.
+   * @brief 从序列化字节流恢复 block。
    *
-   * This function parses and decodes the serialized string data to reconstruct
-   * the block's structure, including all key-value offsets and entries.
-   * The decoded data format can reference ObBlockBuilder.
-   * @param data The serialized block data as a string.
-   * @return RC The result code indicating the success or failure of the decode operation.
+   * 这里会重新切出 data 区和 offset 区，使得后续迭代/查找可以直接在内存视图上工作。
    */
   RC decode(const string &data);
 
@@ -76,7 +75,7 @@ public:
 private:
   string           data_;
   vector<uint32_t> offsets_;
-  // TODO: remove
+  // 用于块内二分/线性查找时比较 key。
   const ObComparator *comparator_;
 };
 
@@ -115,6 +114,7 @@ public:
   string_view value() const override { return value_; }
 
 private:
+  // 解析当前 index 指向的 entry，更新 key_/value_ 视图。
   void parse_entry();
 
 private:
@@ -140,7 +140,7 @@ public:
   string first_key_;
   string last_key_;
 
-  // Offset of ObBlock in SSTable
+  // 当前 block 在 SSTable 文件中的起始偏移和字节长度。
   uint32_t offset_;
   uint32_t size_;
 };

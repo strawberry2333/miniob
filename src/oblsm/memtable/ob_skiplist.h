@@ -14,27 +14,22 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
-// Thread safety
+// 线程安全说明
 // -------------
 //
-// Writes require external synchronization, most likely a mutex.
-// Reads require a guarantee that the ObSkipList will not be destroyed
-// while the read is in progress. Apart from that, reads progress
-// without any internal locking or synchronization.
+// 这个跳表实现沿用了 LevelDB 的核心思路：
+// - 写入需要外部同步，通常由上层 mutex 保证；
+// - 读取本身不加内部锁，只要求读期间跳表对象本身不被销毁。
 //
-// Invariants:
+// 关键不变量：
+// 1. 节点一旦分配，在整个跳表销毁前都不会被释放；
+// 2. 节点一旦挂入链表，除了 next 指针外，其余内容都视为不可变；
+// 3. 发布节点时通过原子读写保证读线程看到的是“已完整初始化”的节点。
 //
-// (1) Allocated nodes are never deleted until the ObSkipList is
-// destroyed.  This is trivially guaranteed by the code since we
-// never delete any skip list nodes.
-//
-// (2) The contents of a Node except for the next/prev pointers are
-// immutable after the Node has been linked into the ObSkipList.
-// Only insert() modifies the list, and it is careful to initialize
-// a node and use release-stores to publish the nodes in one or
-// more lists.
-//
-// ... prev vs. next pointer ordering ...
+// 这种设计非常适合 MemTable：
+// - 插入很多；
+// - 删除几乎没有（冻结后整体丢弃）；
+// - 需要始终保持有序以支持后续 flush/迭代。
 
 #include "common/math/random_generator.h"
 #include "common/lang/atomic.h"
@@ -51,7 +46,7 @@ private:
 
 public:
   /**
-   * @brief Create a new ObSkipList object that will use "cmp" for comparing keys.
+   * @brief 创建一个使用给定比较器的跳表。
    */
   explicit ObSkipList(ObComparator cmp);
 
@@ -60,69 +55,62 @@ public:
   ~ObSkipList();
 
   /**
-   * @brief Insert key into the list.
-   * REQUIRES: nothing that compares equal to key is currently in the list
+   * @brief 将一个 key 插入跳表。
+   * @note 要求当前表中不存在“比较结果相等”的旧 key。
    */
   void insert(const Key &key);
 
   void insert_concurrently(const Key &key);
 
   /**
-   * @brief Returns true if an entry that compares equal to key is in the list.
-   *  @param [in] key
-   *  @return true if found, false otherwise
+   * @brief 判断跳表中是否存在与给定 key 相等的元素。
    */
   bool contains(const Key &key) const;
 
   /**
-   * @brief Iteration over the contents of a skip list
+   * @brief 跳表只读迭代器。
    */
   class Iterator
   {
   public:
     /**
-     * @brief Initialize an iterator over the specified list.
-     * @return The returned iterator is not valid.
+     * @brief 基于给定跳表构造迭代器。
+     * @note 构造完成后默认无效，需要显式 seek。
      */
     explicit Iterator(const ObSkipList *list);
 
     /**
-     * @brief Returns true iff the iterator is positioned at a valid node.
+     * @brief 当前是否指向有效节点。
      */
     bool valid() const;
 
     /**
-     * @brief Returns the key at the current position.
-     * REQUIRES: valid()
+     * @brief 返回当前节点的 key。
      */
     const Key &key() const;
 
     /**
-     * @brief Advance to the next entry in the list.
-     * REQUIRES: valid()
+     * @brief 前进到下一个节点。
      */
     void next();
 
     /**
-     * @brief Advances to the previous position.
-     * REQUIRES: valid()
+     * @brief 回退到前一个节点。
      */
     void prev();
 
     /**
-     * @brief Advance to the first entry with a key >= target
+     * @brief 定位到第一个 `>= target` 的节点。
      */
     void seek(const Key &target);
 
     /**
-     * @brief Position at the first entry in list.
-     * @note Final state of iterator is valid() iff list is not empty.
+     * @brief 定位到第一个节点。
      */
     void seek_to_first();
 
     /**
-     * @brief Position at the last entry in list.
-     * @note Final state of iterator is valid() iff list is not empty.
+     * @brief 定位到最后一个节点。
      */
     void seek_to_last();
 
@@ -143,19 +131,14 @@ private:
   int   random_height();
   bool  equal(const Key &a, const Key &b) const { return (compare_(a, b) == 0); }
 
-  // Return the earliest node that comes at or after key.
-  // Return nullptr if there is no such node.
-  //
-  // If prev is non-null, fills prev[level] with pointer to previous
-  // node at "level" for every level in [0..max_height_-1].
+  // 找到第一个 `>= key` 的节点。
+  // 若 prev 非空，还会顺手记录每一层上的前驱节点，供插入新节点时使用。
   Node *find_greater_or_equal(const Key &key, Node **prev) const;
 
-  // Return the latest node with a key < key.
-  // Return head_ if there is no such node.
+  // 找到最后一个 `< key` 的节点；若不存在则返回头节点。
   Node *find_less_than(const Key &key) const;
 
-  // Return the last node in the list.
-  // Return head_ if list is empty.
+  // 找到整张表的最后一个节点；空表时返回头节点。
   Node *find_last() const;
 
   // Immutable after construction
@@ -163,9 +146,8 @@ private:
 
   Node *const head_;
 
-  // Modified only by insert().  Read racily by readers, but stale
-  // values are ok.
-  atomic<int> max_height_;  // Height of the entire list
+  // 当前整张跳表的最高层数。只有写线程更新，读线程看到旧值也不影响正确性。
+  atomic<int> max_height_;
 
   static common::RandomGenerator rnd;
 };
@@ -181,24 +163,21 @@ struct ObSkipList<Key, ObComparator>::Node
 
   Key const key;
 
-  // Accessors/mutators for links.  Wrapped in methods so we can
-  // add the appropriate barriers as necessary.
+  // next 指针统一封装在方法里，便于精确控制原子内存序。
   Node *next(int n)
   {
     ASSERT(n >= 0, "n >= 0");
-    // Use an 'acquire load' so that we observe a fully initialized
-    // version of the returned Node.
+    // acquire load 保证读线程看到的节点内容已经完整初始化。
     return next_[n].load(std::memory_order_acquire);
   }
   void set_next(int n, Node *x)
   {
     ASSERT(n >= 0, "n >= 0");
-    // Use a 'release store' so that anybody who reads through this
-    // pointer observes a fully initialized version of the inserted node.
+    // release store 负责“发布”节点。
     next_[n].store(x, std::memory_order_release);
   }
 
-  // No-barrier variants that can be safely used in a few locations.
+  // 在局部已知安全的场景下使用 relaxed 变体，减少额外同步成本。
   Node *nobarrier_next(int n)
   {
     ASSERT(n >= 0, "n >= 0");

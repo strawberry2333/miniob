@@ -13,14 +13,18 @@ See the Mulan PSL v2 for more details. */
 #include "oblsm/util/ob_coding.h"
 
 namespace oceanbase {
+
+// 用户键直接按字节序比较即可。
 int ObDefaultComparator::compare(const string_view &a, const string_view &b) const { return a.compare(b); }
 
 int ObInternalKeyComparator::compare(const string_view &a, const string_view &b) const
 {
+  // 先比较 user key，只有 user key 相同时才进一步比较版本号。
   const string_view akey = extract_user_key(a);
   const string_view bkey = extract_user_key(b);
   int               r    = default_comparator_.compare(akey, bkey);
   if (r == 0) {
+    // 同一个 user key 下，seq 越大代表版本越新，排序时应越靠前。
     uint64_t aseq = get_numeric<uint64_t>(akey.data() + a.size() - SEQ_SIZE);
     uint64_t bseq = get_numeric<uint64_t>(bkey.data() + b.size() - SEQ_SIZE);
     if (aseq > bseq) {

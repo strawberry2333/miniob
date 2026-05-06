@@ -21,26 +21,34 @@ namespace oceanbase {
 
 class ObLsmTransaction;
 /**
- * @brief ObLsm is a key-value storage engine for educational purpose.
- * ObLsm learned a lot about design from leveldb and streamlined it.
- * TODO: add more comments about ObLsm.
+ * @brief ObLsm 对外暴露的 LSM-Tree Key-Value 存储接口。
+ *
+ * 这个类只定义“能力边界”，不关心底层实现细节：
+ * - 写入路径通常是 WAL -> MemTable -> SSTable；
+ * - 读取路径通常是 MemTable / Immutable MemTable / SSTable 的多路归并；
+ * - 恢复路径通常依赖 Manifest 与 WAL。
+ *
+ * 当前工程中的具体实现类是 `ObLsmImpl`，这里保留抽象接口有两个目的：
+ * 1. 让上层调用方只依赖稳定的 API，而不依赖具体实现；
+ * 2. 便于后续替换存储引擎实现或补充 Mock/Test 实现。
  */
 class ObLsm
 {
 public:
   /**
-   * @brief Opens an LSM-Tree database at the specified path.
+   * @brief 打开指定目录下的 ObLsm 实例。
    *
-   * This is a static method that initializes an LSM-Tree database instance.
-   * It allocates memory for the database and returns a pointer to it through the
-   * `dbptr` parameter. The caller is responsible for freeing the memory allocated
-   * for the database by deleting the returned pointer when it is no longer needed.
+   * 这是模块的统一入口。实现上会：
+   * 1. 创建 `ObLsmImpl` 对象；
+   * 2. 打开/恢复 Manifest；
+   * 3. 根据 Manifest 与 WAL 恢复内存状态和磁盘状态；
+   * 4. 将最终实例返回给调用方。
    *
-   * @param options A reference to the LSM-Tree options configuration.
-   * @param path A string specifying the path to the database.
-   * @param dbptr A double pointer to store the allocated database instance.
-   * @return An RC value indicating success or failure of the operation.
-   * @note The caller must delete the returned database pointer (`*dbptr`) when done.
+   * @param options LSM 引擎配置项，例如 memtable 大小、compaction 策略等。
+   * @param path 数据目录。SST、Manifest、WAL 都会落在该目录下。
+   * @param dbptr 输出参数，返回堆上分配出的数据库对象。
+   * @return 成功返回 `RC::SUCCESS`，失败返回对应错误码。
+   * @note 返回对象由调用方负责释放。
    */
   static RC open(const ObLsmOptions &options, const string &path, ObLsm **dbptr);
 
@@ -53,68 +61,74 @@ public:
   virtual ~ObLsm() = default;
 
   /**
-   * @brief Inserts or updates a key-value entry in the LSM-Tree.
+   * @brief 写入一条键值对。
    *
-   * This method adds a new entry
+   * 在 LSM 语义里，“更新”本质上也是一次新的追加写入：
+   * 同一个 user key 会携带更大的序列号写入，读取时由可见性规则选出最新版本。
    *
-   * @param key The key to insert or update.
-   * @param value The value associated with the key.
-   * @return An RC value indicating success or failure of the operation.
+   * @param key 用户键。
+   * @param value 用户值。
+   * @return 成功返回 `RC::SUCCESS`。
    */
   virtual RC put(const string_view &key, const string_view &value) = 0;
 
   /**
-   * @brief Retrieves the value associated with a specified key.
+   * @brief 读取指定 key 对应的最新可见值。
    *
-   * This method looks up the value corresponding to the given key in the LSM-Tree.
-   * If the key exists, the value is stored in the output parameter `*value`.
+   * 实现通常会构造统一迭代器，把内存和磁盘上的多份数据视为一个有序流，
+   * 再根据内部 key 中的序列号与删除标记决定最终返回值。
    *
-   * @param key The key to look up.
-   * @param value Pointer to a string where the retrieved value will be stored.
-   * @return An RC value indicating success or failure of the operation.
+   * @param key 待查找的用户键。
+   * @param value 输出参数，命中后写入结果值。
+   * @return 找到返回 `RC::SUCCESS`，不存在通常返回 `RC::NOT_EXIST`。
    */
   virtual RC get(const string_view &key, string *value) = 0;
 
   /**
-   * @brief Delete a key-value entry in the LSM-Tree.
+   * @brief 删除一条键值记录。
    *
-   * This method remove a entry
+   * 在 LSM 中，删除通常不是立刻物理移除，而是写入一个 value 为空的 tombstone。
+   * 后续 compaction 才有机会真正丢弃被覆盖的数据版本。
    *
-   * @param key The key to remove.
-   * @return An RC value indicating success or failure of the operation.
+   * @param key 待删除的用户键。
+   * @return 成功返回 `RC::SUCCESS`。
    */
   virtual RC remove(const string_view &key) = 0;
 
   // TODO: distinguish transaction interface and non-transaction interface, refer to rocksdb
+  /**
+   * @brief 开启一个事务对象。
+   *
+   * 目前事务能力仍在演进中，接口已经预留，但大部分实现尚未完成。
+   */
   virtual ObLsmTransaction *begin_transaction() = 0;
 
   /**
-   * @brief Creates a new iterator for traversing the LSM-Tree database.
+   * @brief 创建遍历数据库内容的迭代器。
    *
-   * This method returns a heap-allocated iterator over the contents of the
-   * database. The iterator is initially invalid, and the caller must use one
-   * of the `seek`/`seek_to_first`/`seek_to_last` methods on the iterator
-   * before accessing any elements.
+   * 返回的通常是“用户视角”的迭代器，而不是直接暴露内部 key。
+   * 也就是说，调用方看到的是：
+   * - 已经按 user key 去重后的结果；
+   * - 已经根据 seq 过滤过版本后的结果；
+   * - 已经屏蔽 tombstone 的结果。
    *
-   * @param options Read options to configure the behavior of the iterator.
-   * @return A pointer to the newly created iterator.
-   * @note The caller is responsible for deleting the iterator when it is no longer needed.
+   * @param options 读选项，例如指定可见版本上限。
+   * @return 新建的迭代器对象，生命周期由调用方管理。
    */
   virtual ObLsmIterator *new_iterator(ObLsmReadOptions options) = 0;
 
   /**
-   * @brief Inserts a batch of key-value entries into the LSM-Tree.
+   * @brief 批量写入多条键值对。
    *
-   * @param kvs A vector of key-value pairs to insert.
-   * @return An RC value indicating success or failure of the operation.
+   * 当前接口已预留，但底层实现还未完整支持。
+   *
+   * @param kvs 待写入的键值对集合。
+   * @return 成功返回 `RC::SUCCESS`，未实现时可能返回 `RC::UNIMPLEMENTED`。
    */
   virtual RC batch_put(const vector<pair<string, string>> &kvs) = 0;
 
   /**
-   * @brief Dumps all SSTables for debugging purposes.
-   *
-   * This method outputs the structure and contents of all SSTables in the
-   * LSM-Tree for debugging or inspection purposes.
+   * @brief 输出当前 SSTable 分层/分组信息，主要用于调试。
    */
   virtual void dump_sstables() = 0;
 };

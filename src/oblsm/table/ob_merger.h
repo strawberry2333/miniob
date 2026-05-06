@@ -19,10 +19,16 @@ class ObComparator;
 class ObLsmIterator;
 
 /**
- * @brief Return an iterator that provided the union of the data in
- * children. For example, an iterator that provided
- * the union of memtable and sstable.
+ * @brief 构造多路归并迭代器。
  *
+ * 它会把多个已经各自有序的子迭代器合并成一条全局有序流。
+ * 典型输入包括：
+ * - 当前 MemTable；
+ * - Immutable MemTable；
+ * - 多个 SSTable。
+ *
+ * 这个归并器不负责“版本可见性”和“去重”，只负责维护全局顺序。
+ * 更上层的 `ObUserIterator` 再在这个基础上做语义过滤。
  */
 ObLsmIterator *new_merging_iterator(const ObComparator *comparator, vector<unique_ptr<ObLsmIterator>> &&children);
 

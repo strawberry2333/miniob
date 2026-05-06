@@ -44,7 +44,7 @@ struct WalRecord
 
 /**
  * @class WAL
- * @brief 负责预写日志（WAL）的写入与 memtable 恢复。
+ * @brief 负责预写日志（WAL）的写入与恢复。
  *
  * WAL 保证数据写入主存储前先持久化到日志文件，系统崩溃后可通过重放日志恢复 memtable。
  *
@@ -56,7 +56,8 @@ struct WalRecord
  * - **Value 长度（size_t）**：值的字节长度。
  * - **Value（string）**：值的内容。
  *
- * 每次写入后调用 `flush()` 确保数据落盘。
+ * 在理想实现里，写路径应先追加 WAL，再写入 MemTable。
+ * 是否每次都强制 `sync`，由 `ObLsmOptions::force_sync_new_log` 控制。
  */
 class WAL
 {
@@ -67,6 +68,9 @@ public:
 
   /**
    * @brief 打开 WAL 文件，准备追加写入。
+   *
+   * 通常一个活跃 memtable 对应一个 WAL 文件；memtable freeze 之后，
+   * 新 memtable 会切到新的 WAL 文件继续写。
    *
    * @param filename WAL 文件路径
    * @return 成功返回 `RC::SUCCESS`，否则返回错误码。
@@ -97,6 +101,8 @@ public:
   /**
    * @brief 将 WAL 缓冲区强制刷盘。
    *
+   * 这是 WAL durability 的关键点：是否频繁调用它，决定了吞吐和崩溃安全之间的取舍。
+   *
    * @return 成功返回 `RC::SUCCESS`，否则返回错误码。
    */
   RC sync() { return RC::UNIMPLEMENTED; }
@@ -104,6 +110,7 @@ public:
   const string &filename() const { return filename_; }
 
 private:
+  // 仅保存日志文件名；真正的写句柄未来可在实现中补齐。
   string filename_;
 };
 }  // namespace oceanbase

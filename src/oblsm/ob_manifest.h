@@ -24,22 +24,16 @@
 namespace oceanbase {
 
 /**
- * @brief A utility class to convert between JSON and user-defined types.
+ * @brief JSON 与 Manifest 记录对象之间的转换工具。
  *
- * Provides template methods for converting an object to JSON and vice versa.
- * Specialized template functions exist for specific types like `CompactionType`.
+ * Manifest 文件本质上是一串“带长度前缀的 JSON 记录”，因此所有记录类型都需要
+ * 能在内存对象和 JSON 之间来回转换。
  */
 class JsonConverter
 {
 public:
   /**
-   * @brief Converts an object of type T to a JSON value.
-   *
-   * This function uses the `to_json()` method of the type T to convert it to JSON.
-   *
-   * @tparam T The type of the object.
-   * @param t The object to be converted.
-   * @return The JSON value representing the object.
+   * @brief 把业务对象序列化成 JSON。
    */
   template <typename T>
   static Json::Value to_json(const T &t)
@@ -48,14 +42,7 @@ public:
   }
 
   /**
-   * @brief Converts a JSON value to an object of type T.
-   *
-   * This function uses the `from_json()` method of the type T to convert the JSON value.
-   *
-   * @tparam T The type of the object.
-   * @param v The JSON value to be converted.
-   * @param t The object that will be populated from the JSON value.
-   * @return An RC indicating the result of the operation.
+   * @brief 把 JSON 反序列化回业务对象。
    */
   template <typename T>
   static RC from_json(const Json::Value &v, T &t)
@@ -66,12 +53,7 @@ public:
 };
 
 /**
- * @brief Specialization of `to_json()` for `CompactionType`.
- *
- * Converts a `CompactionType` value to its integer representation in JSON format.
- *
- * @param type The `CompactionType` value to convert.
- * @return A JSON value representing the integer value of `CompactionType`.
+ * @brief `CompactionType` 的 JSON 序列化特化。
  */
 template <>
 inline Json::Value JsonConverter::to_json<CompactionType>(const CompactionType &type)
@@ -82,13 +64,7 @@ inline Json::Value JsonConverter::to_json<CompactionType>(const CompactionType &
 }
 
 /**
- * @brief Specialization of `from_json()` for `CompactionType`.
- *
- * Converts a JSON value representing an integer into a `CompactionType`.
- *
- * @param v The JSON value to convert.
- * @param type The `CompactionType` value that will be populated from the JSON value.
- * @return An RC indicating the result of the operation.
+ * @brief `CompactionType` 的 JSON 反序列化特化。
  */
 template <>
 inline RC JsonConverter::from_json<CompactionType>(const Json::Value &v, CompactionType &type)
@@ -105,14 +81,16 @@ inline RC JsonConverter::from_json<CompactionType>(const Json::Value &v, Compact
 }
 
 /**
- * @brief Struct representing SSTable information in a manifest.
+ * @brief Manifest 中描述某个 SSTable 所在位置的元信息。
  *
- * This struct contains metadata about an SSTable, including its ID and level.
+ * 这里不直接保存整个 SSTable 的细节，只保存：
+ * - sstable_id：文件身份
+ * - level：它属于哪个层级/哪个 run
  */
 struct ObManifestSSTableInfo
 {
-  int sstable_id;  ///< The ID of the SSTable.
-  int level;       ///< The level of the SSTable.
+  int sstable_id;
+  int level;
 
   /**
    * @brief Constructor to initialize with given SSTable ID and level.
@@ -156,18 +134,19 @@ struct ObManifestSSTableInfo
 };
 
 /**
- * @brief Represents a record in the manifest, used for compaction operations.
+ * @brief 一条 compaction 变更记录。
  *
- * Contains information about SSTables that have been added or deleted during a compaction.
+ * 这类记录描述的是“某次 compaction 之后 SSTable 集合发生了哪些变化”，
+ * 恢复时只要按顺序回放这些增删操作，就能还原出当时的磁盘视图。
  */
 class ObManifestCompaction
 {
 public:
-  CompactionType                     compaction_type;      ///< The type of compaction (e.g., level)
-  std::vector<ObManifestSSTableInfo> deleted_tables;       ///< List of deleted SSTables.
-  std::vector<ObManifestSSTableInfo> added_tables;         ///< List of added SSTables.
-  uint64_t                           sstable_sequence_id;  ///< Sequence ID for SSTables.
-  uint64_t                           seq_id;               ///< Sequence ID for the record.
+  CompactionType                     compaction_type;
+  std::vector<ObManifestSSTableInfo> deleted_tables;
+  std::vector<ObManifestSSTableInfo> added_tables;
+  uint64_t                           sstable_sequence_id;
+  uint64_t                           seq_id;
 
   static string record_type() { return "ObManifestCompaction"; }
 
@@ -194,17 +173,18 @@ public:
 };
 
 /**
- * @brief Represents a snapshot of the manifest.
+ * @brief 一条全量快照记录。
  *
- * Contains information about the current state of the SSTables.
+ * 它直接描述某一时刻整个 LSM 的 SSTable 拓扑与关键序列号，
+ * 用于加速恢复，避免每次启动都从最早的 compaction record 一直回放。
  */
 class ObManifestSnapshot
 {
 public:
-  std::vector<std::vector<uint64_t>> sstables;         ///< A list of SSTable IDs grouped by levels.
-  uint64_t                           seq;              ///< The sequence ID for the snapshot.
-  uint64_t                           sstable_id;       ///< The ID of the SSTable.
-  CompactionType                     compaction_type;  ///< The type of compaction.
+  std::vector<std::vector<uint64_t>> sstables;
+  uint64_t                           seq;
+  uint64_t                           sstable_id;
+  CompactionType                     compaction_type;
 
   static string record_type() { return "ObManifestSnapshot"; }
 
@@ -231,15 +211,15 @@ public:
 };
 
 /**
- * @brief Represents a new memtable of ObLsm.
+ * @brief 记录“当前活跃 memtable 对应的 WAL 编号”。
  *
- * It is used to recover the latest memtable.
+ * 启动恢复时，磁盘上的 SSTable 状态可以由快照和 compaction record 还原，
+ * 而最新尚未刷盘的内存写入，则需要靠这条记录定位 WAL 后再重放。
  */
 class ObManifestNewMemtable
 {
 public:
-  uint64_t memtable_id;  ///< The id of memtable and it is used to find the WAL file of memtable.(e.g., memtable=1, WAL
-                         ///< file = 1.wal)
+  uint64_t memtable_id;
 
   static string record_type() { return "ObManifestNewMemtable"; }
 
@@ -262,35 +242,37 @@ public:
 };
 
 /**
- * @brief A class that manages the manifest file, including reading and writing records and snapshots.
+ * @brief Manifest 文件管理器。
  *
- * This class handles the reading and writing of manifest records and snapshots, ensuring the data is serialized to
- * JSON format and stored in a file. The manifest file is used to track SSTable changes during compaction and recovery.
+ * Manifest 是 ObLsm 的“元数据日志”：
+ * - 记录当前有哪些 SSTable；
+ * - 记录每次 compaction 新增/删除了哪些 SSTable；
+ * - 记录最新 memtable/WAL 的编号；
+ * - 负责在恢复后生成新的 snapshot，压缩历史日志长度。
  */
 class ObManifest
 {
 public:
   /**
-   * @brief Constructs an ObManifest object with the specified path.
-   * @param path The directory path where the manifest files are stored.
+   * @brief 基于数据目录构造 Manifest 管理器。
    */
   ObManifest(const std::string &path) : path_(filesystem::path(path)) { current_path_ = path_ / "CURRENT"; }
 
   /**
-   * @brief Opens the manifest file and initializes the reader and writer.
-   * @return RC::SUCCESS if the file is opened successfully, otherwise RC::IOERR_OPEN.
+   * @brief 打开 CURRENT 指向的 Manifest 文件。
+   *
+   * 若当前目录还没有 Manifest，则会初始化一个空的 Manifest 和默认的
+   * `ObManifestNewMemtable` 记录。
    */
   RC open();
 
   /**
-   * @brief Pushes a record or snapshot to the writer.
+   * @brief 追加一条 Manifest 记录。
    *
-   * This function serializes either an ObManifestCompaction ,ObManifestNewMemtable or ObManifestSnapshot to JSON format
-   * and writes it to the file. It also prefixes the JSON data with its length for easy retrieval.
+   * 落盘格式为：
+   * `| json_length(size_t) | json_payload |`
    *
-   * @tparam T The type of the data to push (either ObManifestCompaction ,ObManifestNewMemtable or ObManifestSnapshot).
-   * @param data The data to be serialized and pushed to the file.
-   * @return RC::SUCCESS if Push successful
+   * 之所以带长度前缀，是为了恢复时可以顺序扫描，不依赖换行或分隔符。
    */
   template <typename T>
   RC push(const T &data)
@@ -320,36 +302,24 @@ public:
   }
 
   /**
-   * @brief Redirects to a new manifest file.
-   *
-   * @param snapshot The snapshot containing the data to be written to the new manifest file.
-   * @param memtable The mamtable record containing the memtable_id to be written to the new manifest file.
-   * @return RC::SUCCESS,if ObManifest successfully writes snapshot and memtable records into a new manifest file.
+   * @brief 切换到新的 Manifest 文件，并写入最新 snapshot 与 memtable 记录。
    */
   RC redirect(const ObManifestSnapshot &snapshot, const ObManifestNewMemtable &memtable);
 
   /**
-   * @brief Redirects to a new manifest file.
-   *
-   * @param snapshot Record a snapshot of ObLsm.
-   * @param memtable Record the latest WAL's id.
-   * @param compactions Record changes to each compaction operation.
-   * @return RC::SUCCESS, If there is nothing wrong with the recovery process.
+   * @brief 顺序读取当前 Manifest 文件中的所有记录，用于恢复。
    */
   RC recover(std::unique_ptr<ObManifestSnapshot> &snapshot_record,
       std::unique_ptr<ObManifestNewMemtable> &memtbale_record, std::vector<ObManifestCompaction> &compactions);
 
-  uint64_t latest_seq{0};  ///< The latest sequence number persisted in the LSM.
+  // 当前已经持久化到元数据中的最新序列号。
+  uint64_t latest_seq{0};
 
   friend class ObManifestTester;
 
 private:
   /**
-   * @brief Constructs the path to the manifest file.
-   *
-   * @param path The base path where the manifest file is stored.
-   * @param mf_seq The sequence ID of the manifest file.
-   * @return The full path to the manifest file.
+   * @brief 生成某个 Manifest 文件的路径。
    */
   string get_manifest_file_path(string path, uint64_t mf_seq)
   {
@@ -357,12 +327,12 @@ private:
   }
 
 private:
-  filesystem::path path_;          ///< The directory path where manifest files are stored.
-  filesystem::path current_path_;  ///< The path to the CURRENT file that tracks the latest manifest file.
-  uint64_t         mf_seq_;        ///< The sequence ID of the current manifest file.
+  filesystem::path path_;
+  filesystem::path current_path_;
+  uint64_t         mf_seq_;
 
-  std::unique_ptr<ObFileWriter> writer_;  ///< The file writer for manifest data.
-  std::unique_ptr<ObFileReader> reader_;  ///< The file reader for manifest data.
+  std::unique_ptr<ObFileWriter> writer_;
+  std::unique_ptr<ObFileReader> reader_;
 };
 
 }  // namespace oceanbase

@@ -12,15 +12,13 @@ See the Mulan PSL v2 for more details. */
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 //
-// An iterator yields a sequence of key/value pairs from a source.
-// The following class defines the interface.  Multiple implementations
-// are provided by this library.  In particular, iterators are provided
-// to access the contents of a Table or a DB.
+// 迭代器是整个 oblsm 模块最重要的抽象之一。
+// MemTable、Block、SSTable、MergingIterator、UserIterator 都实现了这套接口，
+// 这样上层可以把“不同来源的数据”统一看成一条有序流。
 //
-// Multiple threads can invoke const methods on an ObLsmIterator without
-// external synchronization, but if any of the threads may call a
-// non-const method, all threads accessing the same ObLsmIterator must use
-// external synchronization.
+// 线程安全约定与 LevelDB 类似：
+// - 只读接口在对象生命周期受保护的前提下可以并发调用；
+// - 一旦有线程调用了 seek/next 之类的非 const 方法，就需要外部自行加锁。
 
 #pragma once
 
@@ -31,11 +29,16 @@ namespace oceanbase {
 
 /**
  * @class ObLsmIterator
- * @brief Abstract class for iterating over key-value pairs in an LSM-Tree.
+ * @brief ObLsm 中所有有序遍历器的统一抽象接口。
  *
- * This class provides an interface for iterators used to traverse key-value entries
- * stored in an LSM-Tree. Derived classes must implement this interface to handle
- * specific storage structures, such as SSTables or MemTables.
+ * 这套接口刻意保持很小，只保留：
+ * - 定位：`seek` / `seek_to_first` / `seek_to_last`
+ * - 前进：`next`
+ * - 取值：`key` / `value`
+ * - 状态：`valid`
+ *
+ * 这样可以让上层自由组合不同来源的数据迭代器，最终构建出合并读、范围读、
+ * 版本过滤读等更复杂的访问路径。
  */
 class ObLsmIterator
 {
@@ -49,53 +52,46 @@ public:
   virtual ~ObLsmIterator(){};
 
   /**
-   * @brief Checks if the iterator is currently positioned at a valid key-value pair.
+   * @brief 当前游标是否指向一个有效元素。
    *
-   * @return `true` if the iterator is valid, `false` otherwise.
+   * 只有在 `valid() == true` 时，`key()` / `value()` 才是可访问的。
    */
   virtual bool valid() const = 0;
 
   /**
-   * @brief Moves the iterator to the next key-value pair in the source.
+   * @brief 将游标推进到下一个元素。
    */
   virtual void next() = 0;
 
   /**
-   * @brief Returns the key of the current entry the iterator is positioned at.
+   * @brief 返回当前位置的 key。
    *
-   * This method retrieves the key corresponding to the key-value pair at the
-   * current position of the iterator.
-   *
-   * @return A `string_view` containing the key of the current entry.
+   * 注意：具体返回的是 user key 还是 internal key，取决于迭代器实现。
+   * 例如：
+   * - Block/SSTable/MergingIterator 往往处理 internal key；
+   * - UserIterator 会把它转换成 user key 视图。
    */
   virtual string_view key() const = 0;
 
   /**
-   * @brief Returns the value of the current entry the iterator is positioned at.
-   *
-   * This method retrieves the value corresponding to the key-value pair at the
-   * current position of the iterator.
-   *
-   * @return A `string_view` containing the value of the current entry.
+   * @brief 返回当前位置的 value。
    */
   virtual string_view value() const = 0;
 
   /**
-   * @brief Positions the iterator at the first entry with a key greater than or equal to the specified key.
+   * @brief 将游标定位到第一个 `>= k` 的元素。
    *
-   * @param k The key to search for.
+   * 这里的比较语义同样取决于具体迭代器使用的 key 格式和 comparator。
    */
   virtual void seek(const string_view &k) = 0;
 
   /**
-   * @brief Positions the iterator at the first key-value pair in the source.
-   *
+   * @brief 定位到数据源中的第一个元素。
    */
   virtual void seek_to_first() = 0;
 
   /**
-   * @brief Positions the iterator at the last key-value pair in the source.
-   *
+   * @brief 定位到数据源中的最后一个元素。
    */
   virtual void seek_to_last() = 0;
 };

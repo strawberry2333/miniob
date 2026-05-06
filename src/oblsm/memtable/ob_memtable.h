@@ -23,12 +23,19 @@ namespace oceanbase {
 
 /**
  * @class ObMemTable
- * @brief MemTable implementation for LSM-Tree.
+ * @brief LSM-Tree 的内存写缓冲区。
  *
- * The `ObMemTable` represents an in-memory structure that stores key-value pairs
- * before they are flushed to disk as SSTables. It supports key-value insertion,
- * querying, and iteration. The implementation currently uses a skip list as
- * the underlying data structure.
+ * ObMemTable 承担两个职责：
+ * 1. 接住最新写入，避免每次写都直接落盘；
+ * 2. 以有序结构保存 internal key，方便后续冻结成 SSTable。
+ *
+ * 当前实现使用跳表作为底层索引结构，跳表节点里保存的是一段自描述编码后的 entry：
+ * `| internal_key_size | user_key | seq | value_size | value |`
+ *
+ * 这样设计的好处是：
+ * - 插入时一次性把 key/value 编码到连续内存里；
+ * - 比较时只需要拿到长度前缀后的 internal key；
+ * - 迭代器可以基于同一段内存零拷贝地返回 key/value 视图。
  */
 class ObMemTable : public enable_shared_from_this<ObMemTable>
 {
@@ -38,64 +45,43 @@ public:
   ~ObMemTable() = default;
 
   /**
-   * @brief Retrieves a shared pointer to the current ObMemTable instance.
+   * @brief 取出当前对象对应的 `shared_ptr`。
    *
-   * This method utilizes `std::enable_shared_from_this` to provide a shared pointer
-   * to the current object. Useful when the current object needs to be shared safely
-   * among multiple components.
-   *
-   * @return A shared pointer to the current `ObMemTable` instance.
+   * 迭代器生命周期可能长于当前调用栈，因此需要通过 `shared_from_this`
+   * 保证迭代器持有期间 MemTable 不会被提前释放。
    */
   shared_ptr<ObMemTable> get_shared_ptr() { return shared_from_this(); }
 
   /**
-   * @brief Inserts a key-value pair into the memtable.
+   * @brief 向 MemTable 追加一条新版本记录。
    *
-   * Each entry is versioned using the provided `seq` number. If the same key is
-   * inserted multiple times, the version with the highest sequence number will
-   * take precedence when queried.
-   *
-   * @param seq A sequence number used for versioning the key-value entry.
-   * @param key The key to be inserted.
-   * @param value The value associated with the key.
+   * 注意这里不是“原地更新”，而是把 `(user_key, seq, value)` 编码成一条新的 entry
+   * 插入跳表。读取时再通过 seq 规则筛选出可见版本。
    */
   void put(uint64_t seq, const string_view &key, const string_view &value);
 
   /**
-   * @brief Estimates the memory usage of the memtable.
+   * @brief 返回 MemTable 的近似内存占用。
    *
-   * Returns the approximate memory usage of the memtable, including the
-   * skip list and associated memory allocations.
-   *
-   * @return The approximate memory usage in bytes.
+   * 这里主要依赖 arena 的内存统计，作为是否触发 freeze 的依据。
    */
   size_t appro_memory_usage() const { return arena_.memory_usage(); }
 
   /**
-   * @brief Creates a new iterator for traversing the contents of the memtable.
+   * @brief 创建 MemTable 迭代器。
    *
-   * This method returns a heap-allocated iterator for iterating over key-value
-   * pairs stored in the memtable. The caller is responsible for managing the
-   * lifetime of the returned iterator.
-   *
-   * @return A pointer to the newly created `ObLsmIterator` for the memtable.
+   * 返回的迭代器遍历的是内部编码后的有序 entry，输出 key 为 internal key。
    */
   ObLsmIterator *new_iterator();
 
 private:
   friend class ObMemTableIterator;
   /**
-   * @brief Compares two keys.
+   * @brief 跳表使用的 entry 比较器。
    *
-   * Uses the internal comparator to perform lexicographical comparison between
-   * two keys.
-   *
-   * @param a Pointer to the first key.
-   * @param b Pointer to the second key.
-   * @return An integer indicating the result of the comparison:
-   *         - Negative value if `a < b`
-   *         - Zero if `a == b`
-   *         - Positive value if `a > b`
+   * 跳表里存的是完整 entry 的起始地址，而不是单独的 key。
+   * 因此比较时需要先从 entry 中解出长度前缀后的 internal key，再交给
+   * `ObInternalKeyComparator` 处理。
    */
   struct KeyComparator
   {
@@ -104,38 +90,33 @@ private:
     int operator()(const char *a, const char *b) const;
   };
 
-  // TODO: currently the memtable use skiplist as the underlying data structure,
-  // it is possible to use other data structure, for example, hash table.
+  // 当前实现采用跳表，是因为它天然支持有序插入和顺序遍历。
   typedef ObSkipList<const char *, KeyComparator> Table;
 
   /**
-   * @brief Comparator used for ordering keys in the memtable.
-   *
-   * This member defines the rules for comparing keys in the skip list.
-   * TODO: support user-defined comparator
+   * @brief 决定 MemTable 内部有序性的比较器。
    */
   KeyComparator comparator_;
 
   /**
-   * @brief The underlying data structure used for key-value storage.
-   *
-   * Currently implemented as a skip list. Future versions may support
-   * alternative data structures, such as hash tables.
+   * @brief 真实承载 entry 的有序索引结构。
    */
   Table table_;
 
   /**
-   * @brief Memory arena used for memory management in the memtable.
+   * @brief MemTable 的内存池。
    *
-   * Allocates and tracks memory usage for the skip list and other internal
-   * components of the memtable.
+   * 所有 entry 一次性从 arena 分配，直到整个 MemTable 冻结/销毁时再统一回收，
+   * 这样可以避免细粒度 delete 带来的复杂性和碎片化。
    */
   ObArena arena_;
 };
 
 /**
  * @class ObMemTableIterator
- * @brief An iterator for traversing the contents of an `ObMemTable`.
+ * @brief MemTable 的只读遍历器。
+ *
+ * 它直接遍历跳表中的 entry 地址，再按编码格式把 key/value 切出来。
  */
 class ObMemTableIterator : public ObLsmIterator
 {
@@ -159,7 +140,8 @@ public:
 private:
   shared_ptr<ObMemTable>      mem_;
   ObMemTable::Table::Iterator iter_;
-  string                      tmp_;  // For seek key
+  // 预留给 seek 时构造临时 key；当前实现尚未完整利用。
+  string tmp_;
 };
 
 }  // namespace oceanbase
