@@ -48,6 +48,14 @@ namespace oceanbase {
  *
  * block 自身在尾部还维护一份 offset 表，用于定位每条 entry 的起始位置。
  * 因此 block 既兼顾了顺序遍历，也支持块内查找。
+ *
+ * 更完整地说，`ObBlockBuilder::finish()` 产出的序列化布局是：
+ * `| entry_data... | entry_count | offset[0] ... offset[n-1] | data_start |`
+ *
+ * 其中：
+ * - `entry_data` 区顺序存放所有 `| key_size | key | value_size | value |`；
+ * - `offset[i]` 指向第 i 条 entry 在 `entry_data` 内的起始位置；
+ * - `data_start` 记录 offset 表从哪里开始，便于解码时从尾部反向恢复结构。
  */
 class ObBlock
 {
@@ -55,10 +63,17 @@ class ObBlock
 public:
   ObBlock(const ObComparator *comparator) : comparator_(comparator) {}
 
+  // 仅在解码或构造阶段维护 offset 表；普通读路径只依赖已有 offsets_。
   void add_offset(uint32_t offset) { offsets_.push_back(offset); }
 
   uint32_t get_offset(int index) const { return offsets_[index]; }
 
+  /**
+   * @brief 取出第 `offset` 条 entry 的原始字节切片。
+   *
+   * 注意这里的参数是“entry 下标”，不是 data_ 内的原始字节偏移。
+   * 真正的字节边界通过 offsets_[offset] 与 offsets_[offset + 1] 推导。
+   */
   string_view get_entry(uint32_t offset) const;
 
   int size() const { return offsets_.size(); }
@@ -91,6 +106,10 @@ public:
   ~BlockIterator() override = default;
 
   void seek(const string_view &lookup_key) override;
+  /**
+   * 块内迭代器只负责单个 block 范围内的有序扫描。
+   * 跨块跳转由外层 `TableIterator` 完成，因此这里的 `next()` 到块尾就结束。
+   */
   void seek_to_first() override
   {
     index_ = 0;
@@ -115,6 +134,7 @@ public:
 
 private:
   // 解析当前 index 指向的 entry，更新 key_/value_ 视图。
+  // BlockIterator 不缓存解码后的对象，只缓存两个 string_view。
   void parse_entry();
 
 private:
@@ -141,6 +161,7 @@ public:
   string last_key_;
 
   // 当前 block 在 SSTable 文件中的起始偏移和字节长度。
+  // `first_key_/last_key_` 负责“范围裁剪”，`offset_/size_` 负责真正 I/O。
   uint32_t offset_;
   uint32_t size_;
 };

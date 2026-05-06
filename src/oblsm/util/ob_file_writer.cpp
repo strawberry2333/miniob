@@ -17,6 +17,7 @@ ObFileWriter::~ObFileWriter() { close_file(); }
 RC ObFileWriter::write(const string_view &data)
 {
   RC rc = RC::SUCCESS;
+  // 直接写入原始字节，不附加换行或额外 framing。
   file_  << data;
   if (!file_.good()) {
     rc = RC::IOERR_WRITE;
@@ -27,6 +28,7 @@ RC ObFileWriter::write(const string_view &data)
 RC ObFileWriter::flush()
 {
   RC rc = RC::SUCCESS;
+  // 这里只刷新 C++ 流缓冲；是否真正落盘取决于更底层同步策略。
   file_.flush();
   if (!file_.good()) {
     rc = RC::IOERR_SYNC;
@@ -41,8 +43,10 @@ RC ObFileWriter::open_file()
     return rc;
   }
   if (append_) {
+    // 追加模式：保留旧内容，在文件尾继续顺序写。
     file_.open(filename_, std::ios::app | std::ios::binary);
   } else {
+    // 重建模式：截断旧文件，重新写完整内容。
     file_.open(filename_, std::ios::out | std::ios::trunc | std::ios::binary);
   }
   if (!file_.good()) {
@@ -54,6 +58,7 @@ RC ObFileWriter::open_file()
 void ObFileWriter::close_file()
 {
   if (file_.is_open()) {
+    // 维持当前语义：关闭前先刷新流缓冲，再释放句柄。
     file_.flush();
     file_.close();
   }

@@ -24,6 +24,9 @@ namespace oceanbase {
  * 1. 按 key 顺序不断调用 `add()`；
  * 2. 达到块大小上限或输入结束时调用 `finish()`；
  * 3. 把返回的字节流写入 SSTable。
+ *
+ * 这个 builder 不负责排序，也不负责版本裁剪。
+ * 它假设输入已经是全局有序流，只做“顺序拼接 entry + 记录偏移目录”。
  */
 class ObBlockBuilder
 {
@@ -33,12 +36,14 @@ public:
   RC add(const string_view &key, const string_view &value);
 
   // 完成 block 编码，返回可直接写盘的字节视图。
+  // 返回值指向内部 `data_`，调用方通常会立刻写文件，然后 reset() 复用 builder。
   string_view finish();
 
   // 丢弃当前 block 状态，准备构造下一个 block。
   void reset();
 
   // 返回当前 block 中最后一条 entry 的 key，供生成 BlockMeta 使用。
+  // SSTable 侧会把“首 key + 末 key”记成块范围元数据。
   string last_key() const;
 
   // 近似大小 = 数据区 + offset 数组，作为切块依据。

@@ -17,76 +17,88 @@ namespace oceanbase {
 
 /**
  * @class ObLRUCache
- * @brief A thread-safe implementation of an LRU (Least Recently Used) cache.
+ * @brief LRU 缓存接口占位。
  *
- * The `ObLRUCache` class provides a fixed-size cache that evicts the least recently used
- * entries when the cache exceeds its capacity. It supports thread-safe operations for
- * inserting, retrieving, and checking the existence of cache entries.
+ * 按设计，它应当提供一个固定容量的最近最少使用缓存，常见用途包括：
+ * - block cache；
+ * - 元数据缓存；
+ * - 读路径上的热点对象复用。
  *
- * @tparam KeyType The type of keys used to identify cache entries.
- * @tparam ValueType The type of values stored in the cache.
+ * 完整实现通常会同时维护：
+ * - 哈希表：按 key O(1) 查找；
+ * - 双向链表：维护最近访问顺序；
+ * - 必要的锁：保证并发访问安全。
+ *
+ * 当前版本尚未落地这些数据结构，所有接口都只是骨架：
+ * - `get()` 恒返回 miss；
+ * - `put()` 不保存数据；
+ * - `contains()` 恒返回不存在。
+ *
+ * @tparam KeyType 缓存键类型。
+ * @tparam ValueType 缓存值类型。
  */
 template <typename KeyType, typename ValueType>
 class ObLRUCache
 {
 public:
   /**
-   * @brief Constructs an `ObLRUCache` with a specified capacity.
+   * @brief 创建一个容量受限的缓存描述对象。
    *
-   * @param capacity The maximum number of elements the cache can hold.
+   * @param capacity 理论最大容量。
+   *
+   * 当前实现只保存这个数字，不会真正分配缓存结构。
    */
   ObLRUCache(size_t capacity) : capacity_(capacity) {}
 
   /**
-   * @brief Retrieves a value from the cache using the specified key.
+   * @brief 按 key 查询缓存。
    *
-   * This method searches for the specified key in the cache. If the key is found, the
-   * corresponding value is returned and the key-value pair is moved to the front of the
-   * LRU list (indicating recent use).
+   * 理想情况下，命中后还应把条目移动到“最近访问”位置。
+   * 当前版本没有内部状态，因此始终返回未命中。
    *
-   * @param key The key to search for in the cache.
-   * @param value A reference to store the value associated with the key.
-   * @return `true` if the key is found and the value is retrieved; `false` otherwise.
+   * @param key 待查询键。
+   * @param value 若命中，用于承接结果值；当前实现不会写入。
+   * @return 当前恒为 `false`。
    */
   bool get(const KeyType &key, ValueType &value) { return false; }
 
   /**
-   * @brief Inserts a key-value pair into the cache.
+   * @brief 插入或更新缓存条目。
    *
-   * If the key already exists in the cache, its value is updated, and the key-value pair
-   * is moved to the front of the LRU list. If the cache exceeds its capacity after insertion,
-   * the least recently used entry is evicted.
+   * 完整实现里，这里应处理更新、提升访问热度以及超容量淘汰。
+   * 当前版本为 no-op，仅保留接口定义。
    *
-   * @param key The key to insert into the cache.
-   * @param value The value to associate with the specified key.
+   * @param key 缓存键。
+   * @param value 缓存值。
    */
   void put(const KeyType &key, const ValueType &value) {}
 
   /**
-   * @brief Checks whether the specified key exists in the cache.
+   * @brief 判断 key 是否存在于缓存中。
    *
-   * @param key The key to check in the cache.
-   * @return `true` if the key exists; `false` otherwise.
-   */
+   * 当前实现没有保存任何条目，因此恒返回 `false`。
+   *
+   * @param key 待检查键。
+    */
   bool contains(const KeyType &key) const { return false; }
 
 private:
   /**
-   * @brief The maximum number of elements the cache can hold.
+   * @brief 期望容量上限。
    */
   size_t capacity_;
 };
 
 /**
- * @brief Creates a new instance of `ObLRUCache` with the specified capacity.
+ * @brief 创建一个 LRU 缓存实例。
  *
- * This factory function constructs an `ObLRUCache` instance for the specified key and
- * value types, and initializes it with the given capacity.
+ * 在完整实现里，这个工厂通常会返回堆上缓存对象，供 block cache 等模块持有。
+ * 当前占位版本恒返回 `nullptr`。
  *
- * @tparam Key The type of keys used to identify cache entries.
- * @tparam Value The type of values stored in the cache.
- * @param capacity The maximum number of elements the cache can hold.
- * @return A pointer to the newly created `ObLRUCache` instance.
+ * @tparam Key 键类型。
+ * @tparam Value 值类型。
+ * @param capacity 理论容量上限。
+ * @return 当前恒为 `nullptr`。
  */
 template <typename Key, typename Value>
 ObLRUCache<Key, Value> *new_lru_cache(uint32_t capacity)

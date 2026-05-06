@@ -21,92 +21,98 @@ namespace oceanbase {
 
 /**
  * @class ObFileReader
- * @brief A utility class for reading files in an efficient manner.
+ * @brief 基于文件描述符的只读访问封装。
  *
- * The `ObFileReader` class provides a simple interface for reading files. It allows
- * opening, closing, and reading specific portions of a file while also exposing
- * the file size for external use. This class is intended for use in scenarios where
- * file-based data storage, such as SSTables, is accessed.
+ * 这个类服务于 oblsm 的磁盘读路径，例如：
+ * - 按偏移读取 SSTable 中的 block；
+ * - 读取元数据段或 footer；
+ * - 在 WAL / Manifest 恢复时顺序抓取原始字节。
+ *
+ * 设计上它刻意保持简单：
+ * - `open_file()` 负责建立只读 fd；
+ * - `read_pos()` 负责按给定偏移做定长读取；
+ * - `file_size()` 负责从文件系统查询当前文件大小。
+ *
+ * @note
+ * 1. 当前实现不做缓存，也不做重试；
+ * 2. 调用方需要确保文件已经成功打开，且读取范围合法；
+ * 3. `read_pos()` 要求一次读满指定字节数，否则返回空串表示失败。
  */
 class ObFileReader
 {
 public:
   /**
-   * @brief Constructs an `ObFileReader` object with the specified file name.
+   * @brief 构造一个文件读取器。
    *
-   * The file name is stored internally, but the file is not opened until
-   * `open_file()` is explicitly called.
+   * 构造函数只记录文件名，不会立即打开文件；
+   * 这样便于上层先创建对象，再在合适的时机建立底层 fd。
    *
-   * @param filename The name of the file to be read.
+   * @param filename 目标文件路径。
    */
   ObFileReader(const string &filename) : filename_(filename) {}
 
   ~ObFileReader();
 
   /**
-   * @brief Opens the file for reading.
+   * @brief 以只读方式打开文件。
    *
-   * This method attempts to open the file specified during the construction
-   * of the object. If the file is successfully opened, the internal file descriptor
-   * (`fd_`) is updated.
+   * 内部使用 `::open(..., O_RDONLY)` 获取文件描述符。
+   * 若打开失败，调用方无法继续使用 `read_pos()`。
    *
-   * @return An RC (return code) indicating the success or failure of the operation.
+   * @return 成功返回 `RC::SUCCESS`，失败返回错误码。
    */
   RC open_file();
 
   /**
-   * @brief Closes the file if it is currently open.
+   * @brief 关闭当前 fd。
    *
-   * This method releases the file descriptor (`fd_`) associated with the file.
+   * 当前实现会直接对 `fd_` 调用 `::close()`，并依赖析构时自动收尾。
+   * 由于函数本身不返回状态码，若底层关闭失败不会向上传递。
    */
   void close_file();
 
   /**
-   * @brief Reads a portion of the file from a specified position.
+   * @brief 从指定偏移读取固定长度字节。
    *
-   * This method reads `size` bytes starting from position `pos` in the file.
+   * 这里使用 `pread`，因此读取不会改变文件游标；
+   * 这很适合按 block 偏移随机读取，也避免了多个读操作互相干扰文件位置。
    *
-   * @param pos The starting position (offset) in the file.
-   * @param size The number of bytes to read.
-   * @return A string containing the requested portion of the file's data.
+   * @param pos 起始偏移。
+   * @param size 期望读取的字节数。
+   * @return 成功时返回长度为 `size` 的字节串；若发生短读或错误则返回空串。
    */
   string read_pos(uint32_t pos, uint32_t size);
 
   /**
-   * @brief Returns the size of the file.
+   * @brief 获取文件当前大小。
    *
-   * This method retrieves the size of the file in bytes. It relies on the file
-   * being successfully opened.
+   * 这里按文件名向文件系统查询，而不是依赖已打开 fd 的当前位置。
    *
-   * @return The size of the file in bytes.
+   * @return 文件字节数。
    */
   uint32_t file_size();
 
   /**
-   * @brief Creates a new `ObFileReader` instance.
+   * @brief 创建并立即打开一个读取器。
    *
-   * This static factory method constructs a new `ObFileReader` object and
-   * initializes it with the specified file name.
+   * 这是便捷工厂：构造对象后立刻调用 `open_file()`。
+   * 如果打开失败，则直接返回 `nullptr`，避免上层拿到半初始化对象。
    *
-   * @param filename The name of the file to be read.
-   * @return A `unique_ptr` to the created `ObFileReader` object.
+   * @param filename 文件路径。
+   * @return 成功时返回已打开对象，失败返回 `nullptr`。
    */
   static unique_ptr<ObFileReader> create_file_reader(const string &filename);
 
 private:
   /**
-   * @brief The name of the file to be read.
-   *
-   * This string stores the file name specified during the construction of
-   * the `ObFileReader` object.
+   * @brief 目标文件路径。
    */
   string filename_;
 
   /**
-   * @brief The file descriptor for the currently opened file.
+   * @brief 当前打开的文件描述符。
    *
-   * This integer represents the file descriptor used for reading the file.
-   * If no file is open, it is set to `-1`.
+   * 约定 `-1` 表示尚未打开或已经失效。
    */
   int fd_ = -1;
 };

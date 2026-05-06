@@ -6,10 +6,12 @@
 
 namespace oceanbase {
 
+// 初始时 Arena 还没有托管任何外部分配的内存块。
 ObArena::ObArena() : memory_usage_(0) {}
 
 ObArena::~ObArena()
 {
+  // Arena 生命周期结束时统一释放所有挂在名下的内存块。
   for (size_t i = 0; i < blocks_.size(); i++) {
     delete[] blocks_[i];
   }

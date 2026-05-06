@@ -60,6 +60,10 @@ public:
 
   /**
    * @brief 将游标推进到下一个元素。
+   *
+   * 不同实现对“一次推进”所做的工作量不同：
+   * - 普通底层迭代器通常只移动到物理上的下一条记录；
+   * - UserIterator 之类的高层迭代器可能会顺带跳过同 key 旧版本或 tombstone。
    */
   virtual void next() = 0;
 

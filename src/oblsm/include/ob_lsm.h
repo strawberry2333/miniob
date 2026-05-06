@@ -31,6 +31,9 @@ class ObLsmTransaction;
  * 当前工程中的具体实现类是 `ObLsmImpl`，这里保留抽象接口有两个目的：
  * 1. 让上层调用方只依赖稳定的 API，而不依赖具体实现；
  * 2. 便于后续替换存储引擎实现或补充 Mock/Test 实现。
+ *
+ * 另外，接口层故意不暴露 Manifest、WAL、SSTable 之类内部对象，
+ * 避免调用方绕过调度器直接操作底层状态，破坏恢复链路的一致性。
  */
 class ObLsm
 {
@@ -65,6 +68,7 @@ public:
    *
    * 在 LSM 语义里，“更新”本质上也是一次新的追加写入：
    * 同一个 user key 会携带更大的序列号写入，读取时由可见性规则选出最新版本。
+   * 因此旧版本通常仍会暂时留在磁盘或内存结构中，直到后续 compaction 才可能被真正清理。
    *
    * @param key 用户键。
    * @param value 用户值。
@@ -113,6 +117,7 @@ public:
    * - 已经屏蔽 tombstone 的结果。
    *
    * @param options 读选项，例如指定可见版本上限。
+   * `options.seq == -1` 时表示读当前最新视图，否则表示构造一个“历史快照读”。
    * @return 新建的迭代器对象，生命周期由调用方管理。
    */
   virtual ObLsmIterator *new_iterator(ObLsmReadOptions options) = 0;
@@ -129,6 +134,8 @@ public:
 
   /**
    * @brief 输出当前 SSTable 分层/分组信息，主要用于调试。
+   *
+   * 这里暴露的是引擎内部布局信息，而不是用户视角的数据结果，适合排查 compaction 是否按预期工作。
    */
   virtual void dump_sstables() = 0;
 };

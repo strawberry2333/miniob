@@ -32,10 +32,17 @@ namespace oceanbase {
  * 当前实现使用跳表作为底层索引结构，跳表节点里保存的是一段自描述编码后的 entry：
  * `| internal_key_size | user_key | seq | value_size | value |`
  *
+ * 其中 internal key = `user_key + seq`：
+ * - `user_key` 负责维持用户视角上的字典序；
+ * - `seq` 负责把同一 user key 的多个版本区分开；
+ * - 比较器会把 `seq` 当作版本号处理，通常会让更新版本排在更前面，
+ *   这样读取时沿着有序流扫描即可先遇到“最新可见版本”。
+ *
  * 这样设计的好处是：
  * - 插入时一次性把 key/value 编码到连续内存里；
  * - 比较时只需要拿到长度前缀后的 internal key；
- * - 迭代器可以基于同一段内存零拷贝地返回 key/value 视图。
+ * - 迭代器可以基于同一段内存零拷贝地返回 key/value 视图；
+ * - flush 到 SSTable 时可以直接顺序扫描，无需再额外排序或重编码索引键。
  */
 class ObMemTable : public enable_shared_from_this<ObMemTable>
 {
@@ -57,6 +64,9 @@ public:
    *
    * 注意这里不是“原地更新”，而是把 `(user_key, seq, value)` 编码成一条新的 entry
    * 插入跳表。读取时再通过 seq 规则筛选出可见版本。
+   *
+   * 这里的 `seq` 已经写进 internal key，所以 MemTable 会并存同一 user key 的
+   * 多个历史版本；是否屏蔽旧版本由更上层读路径决定，而不是在写入时覆盖。
    */
   void put(uint64_t seq, const string_view &key, const string_view &value);
 
@@ -71,6 +81,9 @@ public:
    * @brief 创建 MemTable 迭代器。
    *
    * 返回的迭代器遍历的是内部编码后的有序 entry，输出 key 为 internal key。
+   * 这个迭代器通常作为两类上游算子的输入：
+   * - flush：按当前顺序把内容切块写成 SSTable；
+   * - 读路径：与其他 MemTable/SSTable 迭代器一起做多路归并。
    */
   ObLsmIterator *new_iterator();
 
@@ -117,6 +130,8 @@ private:
  * @brief MemTable 的只读遍历器。
  *
  * 它直接遍历跳表中的 entry 地址，再按编码格式把 key/value 切出来。
+ * 这里不会复制底层字节；返回的 `string_view` 直接指向 arena 中的 entry 内存，
+ * 所以前提是迭代期间对应的 MemTable 不能被释放。
  */
 class ObMemTableIterator : public ObLsmIterator
 {
@@ -129,6 +144,10 @@ public:
   ~ObMemTableIterator() override = default;
 
   void seek(const string_view &k) override;
+  /**
+   * `seek_to_first/last` 分别对应整张跳表上的最小/最大 internal key。
+   * 因为跳表天然有序，所以这两个操作只需要委托底层 skiplist iterator。
+   */
   void seek_to_first() override { iter_.seek_to_first(); }
   void seek_to_last() override { iter_.seek_to_last(); }
 
@@ -138,7 +157,9 @@ public:
   string_view value() const override;
 
 private:
+  // 通过 shared_ptr 延长底层 arena 生命周期，保证 iter_ 返回的 string_view 始终有效。
   shared_ptr<ObMemTable>      mem_;
+  // 真正执行有序遍历的是底层 skiplist iterator。
   ObMemTable::Table::Iterator iter_;
   // 预留给 seek 时构造临时 key；当前实现尚未完整利用。
   string tmp_;

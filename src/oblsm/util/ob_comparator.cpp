@@ -14,17 +14,18 @@ See the Mulan PSL v2 for more details. */
 
 namespace oceanbase {
 
-// 用户键直接按字节序比较即可。
+// 用户键没有额外元信息，直接使用 string_view 的字典序比较。
 int ObDefaultComparator::compare(const string_view &a, const string_view &b) const { return a.compare(b); }
 
 int ObInternalKeyComparator::compare(const string_view &a, const string_view &b) const
 {
-  // 先比较 user key，只有 user key 相同时才进一步比较版本号。
+  // internal key 先按 user key 分组，确保同一主键的不同版本会落在相邻位置。
   const string_view akey = extract_user_key(a);
   const string_view bkey = extract_user_key(b);
   int               r    = default_comparator_.compare(akey, bkey);
   if (r == 0) {
-    // 同一个 user key 下，seq 越大代表版本越新，排序时应越靠前。
+    // user key 相同时，再读取尾部 seq。
+    // 这里使用“新版本排前面”的倒序规则，便于上层只取第一个命中的版本。
     uint64_t aseq = get_numeric<uint64_t>(akey.data() + a.size() - SEQ_SIZE);
     uint64_t bseq = get_numeric<uint64_t>(bkey.data() + b.size() - SEQ_SIZE);
     if (aseq > bseq) {

@@ -52,6 +52,13 @@ namespace oceanbase {
  * 1. 打开文件并解析 block meta；
  * 2. 按 block 读取数据，并尽量命中 block cache；
  * 3. 提供遍历接口，参与查询和 compaction。
+ *
+ * 读路径大致分成两级：
+ * 1. 先用 `block_metas_` 做块级定位，判断目标 key 可能落在哪个 block；
+ * 2. 再把对应 block 读入内存，交给 `BlockIterator` 做块内定位。
+ *
+ * 这样做的原因是 SSTable 可能远大于单个 block，
+ * 查询时没有必要每次都把整张表全部读出来。
  */
 class ObSSTable : public enable_shared_from_this<ObSSTable>
 {
@@ -81,6 +88,11 @@ public:
    * - 打开文件；
    * - 读取尾部 meta；
    * - 恢复所有 block 的位置信息。
+   *
+   * init 之后，SSTable 对象就变成一个“只读文件视图”：
+   * - block 内容按需读；
+   * - block meta 常驻内存；
+   * - 多个 TableIterator 可以共享同一个 SSTable 实例。
    */
   void init();
 
@@ -129,6 +141,8 @@ public:
   TableIterator(const shared_ptr<ObSSTable> &sst) : sst_(sst), block_cnt_(sst->block_count()) {}
   ~TableIterator() override = default;
 
+  // 表级 iterator = “当前 block 下标” + “当前块内 iterator”。
+  // 它只在跨块时重新装载 block，块内移动完全委托给 BlockIterator。
   void        seek(const string_view &key) override;
   void        seek_to_first() override;
   void        seek_to_last() override;
@@ -139,6 +153,7 @@ public:
 
 private:
   // 根据 curr_block_idx_ 装载当前 block，并构造块内迭代器。
+  // 如果 block cache 命中，这一步通常不会触发真实磁盘读取。
   void read_block_with_cache();
 
   const shared_ptr<ObSSTable> sst_;
@@ -149,6 +164,7 @@ private:
 };
 
 // 外层 vector 表示 level / run，内层 vector 表示该层上的多个 SSTable。
+// 这与 LSM 多层结构对应，后续查询或 compaction 会遍历这个二维集合。
 using SSTablesPtr = shared_ptr<vector<vector<shared_ptr<ObSSTable>>>>;
 
 }  // namespace oceanbase

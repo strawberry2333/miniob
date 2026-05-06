@@ -10,4 +10,5 @@ See the Mulan PSL v2 for more details. */
 
 #include "oblsm/util/ob_lru_cache.h"
 
+// 模板接口目前没有独立实现代码，文件保留用于后续扩展。
 namespace oceanbase {}  // namespace oceanbase

@@ -29,6 +29,12 @@ class ObLsmIterator;
  *
  * 这个归并器不负责“版本可见性”和“去重”，只负责维护全局顺序。
  * 更上层的 `ObUserIterator` 再在这个基础上做语义过滤。
+ *
+ * 因此它的职责边界很明确：
+ * - 它不知道 value 的含义；
+ * - 它不判断删除标记；
+ * - 它也不合并相同 user key 的多个版本；
+ * 它只是把多个“各自已经按 internal key 有序”的输入流拼成一个更大的有序流。
  */
 ObLsmIterator *new_merging_iterator(const ObComparator *comparator, vector<unique_ptr<ObLsmIterator>> &&children);
 

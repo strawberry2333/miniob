@@ -22,12 +22,17 @@ RC ObBlock::decode(const string &data)
   // 2. offset 数量；
   // 3. offset 数组；
   // 4. entry 数据区。
+  // 解码完成后应把：
+  // - `data_` 指向纯 entry 数据区；
+  // - `offsets_` 恢复为每条 entry 的逻辑下标 -> 字节偏移映射；
+  // 这样上层块内迭代器就无需感知底层序列化细节。
   return RC::UNIMPLEMENTED;
 }
 
 string_view ObBlock::get_entry(uint32_t offset) const
 {
   // 根据 offset 表取出第 offset 条 entry 的字节区间。
+  // 最后一条 entry 的结束位置不在 offset 表里单独保存，因此以 data_ 末尾作为右边界。
   uint32_t    curr_begin = offsets_[offset];
   uint32_t    curr_end   = offset == offsets_.size() - 1 ? data_.size() : offsets_[offset + 1];
   string_view curr       = string_view(data_.data() + curr_begin, curr_end - curr_begin);
@@ -39,6 +44,7 @@ ObLsmIterator *ObBlock::new_iterator() const { return new BlockIterator(comparat
 void BlockIterator::parse_entry()
 {
   // entry 布局：| key_size | key | value_size | value |
+  // 解析结果直接指向 block 内存；TableIterator 切换 block 后这些视图会一起更新。
   curr_entry_         = data_->get_entry(index_);
   uint32_t key_size   = get_numeric<uint32_t>(curr_entry_.data());
   key_                = string_view(curr_entry_.data() + sizeof(uint32_t), key_size);
@@ -50,6 +56,7 @@ string BlockMeta::encode() const
 {
   // block meta 需要记住首尾 key 和块在文件中的位置信息，
   // 这样 TableIterator 才能先靠 meta 做粗粒度定位，再真正读 block。
+  // 这部分元数据通常位于 SSTable 文件尾部，读取表时会先整体加载到内存。
   string ret;
   put_numeric<uint32_t>(&ret, first_key_.size());
   ret.append(first_key_);
@@ -82,6 +89,8 @@ void BlockIterator::seek(const string_view &lookup_key)
 {
    // 当前实现是线性扫描；块不大时实现最简单。
    // 后续可以利用块内有序性改成二分查找。
+   // 注意比较时会把 block 内 entry 的 internal key 降成 user key，
+   // 再与 lookup key 中的 user key 比较，这样块内定位只按用户键范围进行。
    index_ = 0;
    while (valid()) {
     parse_entry();

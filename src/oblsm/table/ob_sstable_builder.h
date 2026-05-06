@@ -26,6 +26,12 @@ namespace oceanbase {
  *
  * 它负责把有序的 MemTable 迭代结果切分成多个 block，并最终落成一个 SSTable 文件。
  * 生成过程中会同步维护 `BlockMeta`，供后续查找时做块级定位。
+ *
+ * 写路径可以概括为：
+ * 1. 顺序读取 MemTable 中的 internal key/value；
+ * 2. 按 `BLOCK_SIZE` 近似切分，交给 `ObBlockBuilder` 编码；
+ * 3. 每写完一个 block，就记录该 block 的首尾 key、文件偏移和长度；
+ * 4. 最后把整份 meta 追加到文件尾部，形成完整 SSTable。
  */
 class ObSSTableBuilder
 {
@@ -44,19 +50,23 @@ public:
   RC                    build(shared_ptr<ObMemTable> mem_table, const string &file_name, uint32_t sst_id);
   size_t                file_size() const { return file_size_; }
   // 基于已落盘文件返回可直接参与读/compaction 的 SSTable 对象。
+  // 注意这里返回的是“重新面向文件的只读视图”，而不是 builder 内部状态本身。
   shared_ptr<ObSSTable> get_built_table();
   // 清理构造状态，准备复用 builder。
   void                  reset();
 
 private:
   // 把当前 block_builder_ 中的数据冲刷到文件，并生成一条 BlockMeta。
+  // 这是 SSTable 写路径里最核心的“切块落盘”步骤。
   void finish_build_block();
 
   const ObComparator      *comparator_ = nullptr;
   ObBlockBuilder           block_builder_;
+  // 当前正在构造的 block 的首 key，用于在 finish_build_block() 时组成范围元数据。
   string                   curr_blk_first_key_;
   unique_ptr<ObFileWriter> file_writer_;
   vector<BlockMeta>        block_metas_;
+  // 指向下一个 block 将要写入到 SST 文件中的起始偏移。
   uint32_t                 curr_offset_ = 0;
   uint32_t                 sst_id_      = 0;
   size_t                   file_size_   = 0;

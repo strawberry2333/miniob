@@ -27,6 +27,10 @@ class ObLsmIterator;
  * - 只保留 `seq` 可见范围内的版本；
  * - 同一个 user key 只返回最新可见版本；
  * - 遇到 tombstone 时跳过该 key。
+ *
+ * 易错点：这里的 `seq` 是“最大可见版本号”，不是要精确命中的版本号。
+ * 因此 seek 和 next 都不能只比较 user key，还必须结合 internal key 中的版本号做过滤。
+ * 返回对象会接管传入 `iterator` 的生命周期，调用方无需再单独释放底层迭代器。
  */
 ObLsmIterator *new_user_iterator(ObLsmIterator *iterator, uint64_t seq);
 

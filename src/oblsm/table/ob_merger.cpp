@@ -30,6 +30,7 @@ public:
   void seek_to_first() override
   {
     // 让每一路子迭代器都回到起点，再选出全局最小 key 的那一路作为 current_。
+    // 这里隐含的前提是每个 child 自身已经是严格按 comparator_ 有序的。
     for (size_t i = 0; i < children_.size(); i++) {
       children_[i]->seek_to_first();
     }
@@ -48,6 +49,7 @@ public:
   void seek(const string_view &target) override
   {
     // 每一路都 seek 到 >= target 的位置，然后从这些候选者里挑出最小者。
+    // 这样得到的是“全局意义上第一个 >= target 的元素”。
     for (size_t i = 0; i < children_.size(); i++) {
       children_[i]->seek(target);
     }
@@ -57,6 +59,7 @@ public:
   void next() override
   {
     // 只有当前最小的那一路需要前进；前进后再重新选全局最小。
+    // 其他路保持原位，因为它们仍然可能在下一轮竞争中胜出。
     current_->next();
     find_smallest();
   }
@@ -86,6 +89,7 @@ void ObMergingIterator::find_smallest()
         smallest = child;
       } else if (comparator_->compare(child->key(), smallest->key()) < 0) {
         // 比较器决定了“新版本更靠前”还是“老版本更靠前”等关键顺序语义。
+        // 只要所有 child 使用同一套 internal key 比较规则，线性挑最小就是正确的。
         smallest = child;
       }
     }
@@ -115,6 +119,7 @@ ObLsmIterator *new_merging_iterator(const ObComparator *comparator, vector<uniqu
     return nullptr;
   } else if (children.size() == 1) {
     // 只有一路时无需再包一层归并器，直接返回底层迭代器即可。
+    // 这样可以少一次虚函数转发，也避免无意义的 current_ 维护。
     return children[0].release();
   } else {
     return new ObMergingIterator(comparator, std::move(children));

@@ -66,6 +66,7 @@ struct ObLsmReadOptions
 {
   ObLsmReadOptions(){};
 
+  // 可见性上界。易错点：这表示“读取 <= seq 的最新版本”，而不是要求版本号必须精确等于 seq。
   int64_t seq = -1;
 };
 

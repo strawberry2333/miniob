@@ -12,6 +12,7 @@ See the Mulan PSL v2 for more details. */
 namespace oceanbase {
 
 // 各类持久化文件在磁盘上的后缀约定。
+// 目录扫描、恢复和新文件创建都依赖这套约定，任何一处变更都必须全链路同步。
 static constexpr const char *SSTABLE_SUFFIX  = ".sst";
 static constexpr const char *MANIFEST_SUFFIX = ".mf";
 static constexpr const char *WAL_SUFFIX      = ".wal";

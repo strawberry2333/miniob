@@ -8,14 +8,17 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
-//
-// Created by Ping Xu(haibarapink@gmail.com)
-//
+// CLI 命令元信息定义。
+// 这里使用 X-Macro 同时生成命令枚举、命令字符串和帮助文案，
+// 避免多处维护时发生遗漏或不一致。
 #include "common/lang/string_view.h"
 namespace oceanbase {
 
 /**
- * @brief add a new command format: DEFINE_OBLSM_CLI_CMD(command's code, command's name, command's usage)
+ * @brief 声明一组 oblsm CLI 命令。
+ *
+ * 如需扩展新命令，只需要在这里增加一行 `DEFINE_OBLSM_CLI_CMD`，
+ * 下面的枚举和辅助函数会自动复用这份定义。
  */
 #define DEFINE_OBLSM_CLI_CMDS                                                                                          \
   DEFINE_OBLSM_CLI_CMD(                                                                                                \
@@ -45,7 +48,7 @@ enum class ObLsmCliCmdType
 
 struct ObLsmCliUtil
 {
-
+  // 把命令枚举转回终端输入时使用的关键字字符串。
   inline static const string_view strcmd(ObLsmCliCmdType command)
   {
 #define DEFINE_OBLSM_CLI_CMD(cmd, name, help) \
@@ -63,6 +66,7 @@ struct ObLsmCliUtil
 #undef DEFINE_OBLSM_CLI_CMD
   }
 
+  // 返回对应命令的 usage 文案，用于 help 和报错提示。
   inline static const string_view cmd_usage(ObLsmCliCmdType command)
   {
 #define DEFINE_OBLSM_CLI_CMD(cmd, name, help) \

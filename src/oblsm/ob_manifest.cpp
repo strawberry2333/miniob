@@ -7,9 +7,9 @@
    EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
    MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
    See the Mulan PSL v2 for more details. */
-//
-// Created by Ping Xu(haibarapink@gmail.com) on 2025/1/24.
-//
+// Manifest 的实现负责两类事情：
+// 1. 把各类元数据对象编码成顺序追加的日志记录；
+// 2. 启动恢复时按顺序解析这些记录，重建最终的磁盘视图。
 #include "oblsm/ob_manifest.h"
 #include "common/log/log.h"
 #include "common/sys/rc.h"
@@ -160,6 +160,7 @@ RC ObManifestSnapshot::from_json(const Json::Value &v)
 
 Json::Value ObManifestNewMemtable::to_json() const
 {
+  // 这类记录很小，但它把 Manifest 与 WAL 链接起来：恢复时会据此找到最后一个活跃 WAL。
   Json::Value root;
   root["record_type"] = ObManifestNewMemtable::record_type();
   root["memtable_id"] = memtable_id;
@@ -180,6 +181,7 @@ RC ObManifest::open()
   string current_path_str = current_path_.generic_string();
   if (filesystem::exists(current_path_)) {
     // 已存在 CURRENT，说明目录里曾经初始化过 LSM，先找到当前生效的 Manifest。
+    // CURRENT 的内容非常小，只是一段数字字符串，因此这里直接整文件读出。
     reader_ = ObFileReader::create_file_reader(current_path_str);
     RC rc   = reader_->open_file();
     if (rc != RC::SUCCESS) {
@@ -204,6 +206,8 @@ RC ObManifest::open()
 
   } else {
     // 首次初始化目录：创建 CURRENT 和第一个空 Manifest。
+    // 初始化时就立刻写入一条 NewMemtable 记录，目的是让恢复流程始终可以假设：
+    // “Manifest 至少能告诉我当前活跃 WAL 编号是什么”。
     mf_seq_                  = 0;
     string current_file_data = std::to_string(mf_seq_);
     string mf_file           = get_manifest_file_path(path_, mf_seq_);
@@ -259,7 +263,10 @@ RC ObManifest::recover(std::unique_ptr<ObManifestSnapshot> &snapshot_record,
   }
 
   // Manifest 是顺序 append 的，恢复时按记录顺序从头扫到尾即可。
+  // 这里不做“随机跳转到最后一条记录”的优化，因为恢复不仅要拿到最后一条
+  // NewMemtable/Snapshot，还要保留快照之后每条 compaction 的原始顺序。
   while (file_size > pos) {
+    // 先读长度前缀，再读完整 JSON 载荷；这样无需在文件里寻找分隔符。
     string len_str = reader_->read_pos(pos, sizeof(len));
     memcpy(&len, len_str.data(), sizeof(len));
     pos += sizeof(len);
@@ -286,6 +293,7 @@ RC ObManifest::recover(std::unique_ptr<ObManifestSnapshot> &snapshot_record,
         return rc;
       }
       // compaction record 需要按原始顺序保留，后续统一回放。
+      // 它描述的是“从上一状态迁移到下一状态”的增量，因此乱序会破坏恢复结果。
       records.emplace_back(std::move(compaction_record));
     } else if (record_type == ObManifestNewMemtable::record_type()) {
       // 只关心最后一条 NewMemtable 记录，因为它代表当前活跃 WAL。
@@ -312,11 +320,13 @@ RC ObManifest::recover(std::unique_ptr<ObManifestSnapshot> &snapshot_record,
 
 RC ObManifest::redirect(const ObManifestSnapshot &snapshot, const ObManifestNewMemtable &memtable)
 {
-
   auto   prev_mf_file = get_manifest_file_path(path_, mf_seq_++);
   auto   new_mf_file  = get_manifest_file_path(path_, mf_seq_);
   string current_file = path_ / "CURRENT";
   RC     rc           = RC::SUCCESS;
+  // redirect 的语义不是“把旧文件继续 rename 使用”，而是新建一份更短的 Manifest：
+  // 新文件只保留最新 snapshot + 当前 memtable 指针，旧的增量历史就被压缩掉了。
+  //
   // 先把新 Manifest 文件写完整，再切换 CURRENT，避免中途崩溃导致 CURRENT 指向坏文件。
   writer_ = ObFileWriter::create_file_writer(new_mf_file, false);
   if (!writer_) {
@@ -349,7 +359,8 @@ RC ObManifest::redirect(const ObManifestSnapshot &snapshot, const ObManifestNewM
   }
   current_writer->close_file();
 
-  // 新文件切换成功后，旧 Manifest 即可删除。
+  // 只有当 CURRENT 已经明确指向新文件后，旧 Manifest 才能删除。
+  // 这个顺序保证了任意时刻都至少存在一份“CURRENT 可达”的有效元数据。
   if (filesystem::exists(prev_mf_file)) {
     remove(prev_mf_file.c_str());
   }

@@ -26,6 +26,7 @@ RC ObBlockBuilder::add(const string_view &key, const string_view &value)
   RC rc = RC::SUCCESS;
   if (appro_size() + key.size() + value.size() + 2 * sizeof(uint32_t) > BLOCK_SIZE) {
     // block 装不下新的 kv 了。若当前 block 为空，说明单条 kv 自身就过大。
+    // 当前实现没有“大 value 跨 block”或“溢出块”策略，因此直接返回未实现。
     if (offsets_.empty()) {
       LOG_ERROR("block is empty, but kv pair is too large, key size: %lu, value size: %lu", key.size(), value.size());
       return RC::UNIMPLEMENTED;
@@ -34,6 +35,8 @@ RC ObBlockBuilder::add(const string_view &key, const string_view &value)
     rc = RC::FULL;
   } else {
     // 记录当前 entry 起始偏移，然后把 key/value 追加到数据区。
+    // 这里是纯追加写，不会回填前面的长度或目录信息；
+    // offset 目录统一在 finish() 阶段一次性写到尾部。
     offsets_.push_back(data_.size());
     put_numeric<uint32_t>(&data_, key.size());
     data_.append(key.data(), key.size());
@@ -46,6 +49,7 @@ RC ObBlockBuilder::add(const string_view &key, const string_view &value)
 string ObBlockBuilder::last_key() const
 {
   // 末条记录总在 offsets_ 的最后一个位置。
+  // 由于 add() 保证 entry 顺序追加，所以“最后一条”的 key 也就是当前 block 的上界 key。
   string_view last_kv(data_.data() + offsets_.back(), data_.size() - offsets_.back());
   uint32_t    key_length = get_numeric<uint32_t>(last_kv.data());
   return string(last_kv.data() + sizeof(uint32_t), key_length);
@@ -58,6 +62,12 @@ string_view ObBlockBuilder::finish()
   // 2. 每条 entry 的 offset；
   // 3. 数据区起始位置。
   // 解码时就可以从尾部反向恢复整个 block 结构。
+  //
+  // 最终布局：
+  // `| entry_data... | count | offset[0] ... offset[n-1] | data_start |`
+  //
+  // 这样设计的原因是写盘时只需要顺序 append，
+  // 而读盘时又能在拿到整块字节后快速拆出目录和数据区。
   uint32_t data_size = data_.size();
   put_numeric<uint32_t>(&data_, offsets_.size());
   for (size_t i = 0; i < offsets_.size(); i++) {

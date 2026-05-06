@@ -15,53 +15,83 @@ namespace oceanbase {
 
 /**
  * @class ObBloomfilter
- * @brief A simple Bloom filter implementation(Need to support concurrency).
+ * @brief Bloom Filter 接口占位。
+ *
+ * Bloom Filter 的典型职责是在读路径上快速回答：
+ * “某个 key 是否一定不存在于当前 SSTable / Block 中”。
+ *
+ * 标准实现通常包含：
+ * - 一个位图；
+ * - 多个哈希函数；
+ * - `insert()` 时把多个位置置 1；
+ * - `contains()` 时检查这些位是否都为 1。
+ *
+ * 语义上它只能保证：
+ * - 返回 `false` 时，元素一定不存在；
+ * - 返回 `true` 时，元素“可能存在”，允许误判。
+ *
+ * 当前代码仍是接口骨架：没有真正保存位图，也没有任何哈希或并发控制逻辑。
+ * 因此这些方法只是为了固定调用面，不能提供真实过滤能力。
  */
 class ObBloomfilter
 {
 public:
   /**
-   * @brief Constructs a Bloom filter with specified parameters.
+   * @brief 构造一个 Bloom Filter 描述对象。
    *
-   * @param hash_func_count Number of hash functions to use. Default is 4.
-   * @param totoal_bits Total number of bits in the Bloom filter. Default is 65536.
+   * @param hash_func_count 计划使用的哈希函数个数。
+   * @param totoal_bits 计划使用的位图总 bit 数。
+   *
+   * 这两个参数描述的是“理想实现”的过滤器规模；
+   * 当前占位实现不会真正保存它们，也不会据此分配位图。
    */
   ObBloomfilter(size_t hash_func_count = 4, size_t totoal_bits = 65536) {}
 
   /**
-   * @brief Inserts an object into the Bloom filter.
-   * @details This method computes hash values for the given object and sets corresponding bits in the filter.
-   * @param object The object to be inserted.
+   * @brief 向过滤器中登记一个对象。
+   *
+   * 在完整实现里，这一步会对 `object` 做多次哈希，并把对应 bit 位置为 1。
+   * 当前版本是空操作，仅保留接口形态。
+   *
+   * @param object 需要登记的对象字节串。
    */
   void insert(const string &object) {}
 
   /**
-   * @brief Clears all entries in the Bloom filter.
+   * @brief 清空过滤器。
    *
-   * @details Resets the filter, removing all previously inserted objects.
+   * 理想情况下这里应把位图全部清零，并重置插入计数。
+   * 当前版本没有内部状态，因此同样是空操作。
    */
   void clear() {}
 
   /**
-   * @brief Checks if an object is possibly in the Bloom filter.
+   * @brief 判断对象是否“可能存在”。
    *
-   * @param object The object to be checked.
-   * @return true if the object might be in the filter, false if definitely not.
+   * 注意：当前实现恒返回 `false`，表示它还没有真正承担过滤职责。
+   * 调用方不能依赖它做存在性剪枝。
+   *
+   * @param object 待检查对象。
+   * @return 在完整实现里，`true` 表示可能存在，`false` 表示一定不存在。
    */
   bool contains(const string &object) const { return false; }
 
   /**
-   * @brief Returns the count of objects inserted into the Bloom filter.
+   * @brief 返回已登记对象数量。
+   *
+   * 完整实现通常会维护一个逻辑计数，便于估算误判率或调试观察。
+   * 当前版本恒返回 0。
    */
   size_t object_count() const { return 0; }
 
   /**
-   * @brief Checks if the Bloom filter is empty.
-   * @return true if the filter is empty, false otherwise.
+   * @brief 判断过滤器是否为空。
+   * @return 当 `object_count()` 为 0 时返回 `true`。
    */
   bool empty() const { return 0 == object_count(); }
 
 private:
+  // 当前占位实现没有成员状态；后续若补齐功能，通常会在这里放置位图和统计信息。
 };
 
 }  // namespace oceanbase

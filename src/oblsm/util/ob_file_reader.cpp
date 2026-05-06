@@ -23,6 +23,7 @@ string ObFileReader::read_pos(uint32_t pos, uint32_t size)
 {
   string buf;
   buf.resize(size);
+  // `pread` 按绝对偏移读取，不依赖也不推进共享文件游标。
   ssize_t read_size = ::pread(fd_, buf.data(), size, static_cast<off_t>(pos));
   if (read_size != size) {
     LOG_WARN("Failed to read file %s, read_size=%ld, size=%ld", filename_.c_str(), read_size, size);
@@ -34,6 +35,7 @@ string ObFileReader::read_pos(uint32_t pos, uint32_t size)
 
 uint32_t ObFileReader::file_size()
 {
+  // 文件大小按路径查询，便于调用方在打开后仍然看到磁盘上的真实长度。
   return filesystem::file_size(filename_);
 }
 
@@ -50,6 +52,7 @@ unique_ptr<ObFileReader> ObFileReader::create_file_reader(const string &filename
 RC ObFileReader::open_file()
 {
   RC rc = RC::SUCCESS;
+  // 读路径只需要只读权限，不负责创建文件。
   fd_ = ::open(filename_.c_str(), O_RDONLY);
   if (fd_ < 0) {
     LOG_WARN("Failed to open file %s", filename_.c_str());
@@ -60,6 +63,7 @@ RC ObFileReader::open_file()
 
 void ObFileReader::close_file()
 {
+  // 保持现有行为：即使 `fd_` 可能为 -1，也直接交给系统调用处理。
   ::close(fd_);
 }
 

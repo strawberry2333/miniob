@@ -8,9 +8,9 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
-//
-// Created by Ping Xu(haibarapink@gmail.com)
-//
+// CLI 解析实现分为两层：
+// - tokenizer: 负责切 token
+// - parser:    负责按命令格式消费 token 并做约束校验
 #include "oblsm/client/cliutil/parser.h"
 #include "common/lang/string.h"
 #include "common/log/log.h"
@@ -19,6 +19,7 @@ See the Mulan PSL v2 for more details. */
 namespace oceanbase {
 void ObLsmCliCmdTokenizer::skip_blank_space()
 {
+  // CLI 允许 token 之间有任意数量空白字符。
   while (!out_of_range() && std::isspace(command_[p_])) {
     p_++;
   }
@@ -26,9 +27,11 @@ void ObLsmCliCmdTokenizer::skip_blank_space()
 
 RC ObLsmCliCmdTokenizer::parse_string(string &res)
 {
+  // 当前字符串语法非常轻量：以 `"` 开始，以未转义 `"` 结束。
   while (!out_of_range() && command_[p_] != '"') {
     char ch = command_[p_++];
     if (ch == '\\' && !out_of_range() && command_[p_] == '"') {
+      // 只处理 `\"` 这一种转义，足够覆盖带引号的 key/value。
       res.push_back('"');
       p_++;
     } else {
@@ -54,7 +57,7 @@ RC ObLsmCliCmdTokenizer::next()
     return RC::INPUT_EOF;
   }
 
-  // e.g. scan - "key"
+  // 例如 `scan - "key"` 中的 `-`，表示使用数据库最小/最大边界。
   if (command_.at(p_) == '-') {
     token_type = TokenType::BOUND;
     p_++;
@@ -78,6 +81,7 @@ RC ObLsmCliCmdTokenizer::next()
   while (!out_of_range()) {
     char ch = command_.at(p_++);
     if (std::isspace(ch) || ch == '\"') {
+      // 命令关键字用空白或引号结束；引号通常意味着下一个 token 是字符串参数。
       break;
     }
     current.push_back(ch);
@@ -95,6 +99,7 @@ RC ObLsmCliCmdTokenizer::next()
 
 RC ObLsmCliCmdParser::parse(string_view command)
 {
+  // 解析入口假设一行只包含一条命令，不做多语句拆分。
   tokenizer_.init(command);
 
   RC rc = tokenizer_.next();
@@ -111,6 +116,7 @@ RC ObLsmCliCmdParser::parse(string_view command)
     case ObLsmCliCmdType::OPEN:
       rc = tokenizer_.next();
       if (OB_FAIL(rc) || tokenizer_.token_type != TokenType::STRING) {
+        // 语法错误时把对应命令的 usage 填入结果，供上层直接打印。
         result.error = ObLsmCliUtil::cmd_usage(ObLsmCliCmdType::OPEN);
         return RC::SYNTAX_ERROR;
       }
@@ -151,6 +157,7 @@ RC ObLsmCliCmdParser::parse(string_view command)
         }
 
         if (tokenizer_.token_type == TokenType::BOUND) {
+          // `-` 表示该方向使用全局边界，而不是具体 key。
           result.bounds[i] = true;
         } else if (tokenizer_.token_type == TokenType::STRING) {
           result.args[i] = std::move(tokenizer_.str);

@@ -10,4 +10,10 @@ See the Mulan PSL v2 for more details. */
 
 #include "oblsm/compaction/ob_compaction.h"
 
-namespace oceanbase {}  // namespace oceanbase
+namespace oceanbase {
+
+// 该文件当前没有独立实现逻辑，`ObCompaction` 的行为都以内联方式定义在头文件中。
+// 保留 cpp 的原因通常是为后续扩展预留编译单元位置，例如补充调试输出、
+// 任务校验逻辑或更复杂的构造辅助函数。
+
+}  // namespace oceanbase

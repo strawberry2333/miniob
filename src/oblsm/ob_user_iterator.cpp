@@ -20,6 +20,8 @@ namespace oceanbase {
 // 这是一个“视图转换器”：
 // 输入是按 internal key 排序的底层迭代器；
 // 输出是按 user key 去重、按 seq 过滤、并屏蔽删除标记后的结果。
+// 之所以能在线性扫描中完成这些工作，是因为底层比较器会把
+// “同一个 user key 的不同版本”排在彼此相邻的位置。
 class ObUserIterator : public ObLsmIterator
 {
 public:
@@ -46,6 +48,7 @@ public:
   void seek(const string_view &target) override
   {
     // UserIterator 需要把 user key 转成 lookup key，才能在内部 key 空间中 seek。
+    // 这里拼的是 internal key 编码格式，从而把底层游标直接定位到“目标 user key + 当前快照上界”附近。
     put_numeric<uint64_t>(&lookup_key_, target.size() + SEQ_SIZE);
     lookup_key_.append(target.data(), target.size());
     put_numeric<uint64_t>(&lookup_key_, seq_);
@@ -60,6 +63,7 @@ public:
   void next() override
   {
     // 先记住当前 user key，后续扫描时要跳过它的旧版本。
+    // 否则内部流里相邻的多个历史版本会被逐个暴露给上层，破坏“用户视角只看一个版本”的语义。
     saved_key_ = extract_user_key(iter_->key());
     iter_->next();
     if (!iter_->valid()) {
@@ -86,12 +90,17 @@ public:
           if (skipping && user_comparator_.compare(user_key, *skip) <= 0) {
             // 仍然是同一个 user key 的旧版本，继续扫描。
           } else {
+            // 到这里说明命中了“快照内第一个可见且未被覆盖的版本”，可以直接对外返回。
             valid_ = true;
             saved_key_.clear();
             return;
           }
         }
       }
+      // 继续推进的原因可能是：
+      // - 版本号比当前快照新；
+      // - 命中了 tombstone；
+      // - 命中了已经消费过的同 key 旧版本。
       iter_->next();
     } while (iter_->valid());
     saved_key_.clear();
@@ -103,7 +112,7 @@ public:
   string_view value() const override { return iter_->value(); }
 
 private:
-  // 底层迭代器输出的是 internal key。
+  // 底层迭代器输出的是 internal key，所有去重和过滤都围绕它展开。
   unique_ptr<ObLsmIterator> iter_;
   uint64_t                  seq_;         // 当前快照可见的最大 seq
   string                    lookup_key_;  // seek 时临时拼装的 lookup key
